@@ -28,12 +28,12 @@ function d(x::PhylogeneticTree, y::PhylogeneticTree)
 end
 
 using JSON
-join(readlines(open("/homes/combi/lenzen/ClusteringPhyloTrees/R-Data/newick-100-4.json")))
+join(readlines(open("../R-Data/newick-100-4.json")))
 JSON.parse(ans)
 samples = phylogenetic_tree.(Float64, map(v -> v[1], ans))
 
 iteration = 1
-centroids = samples[1:3] 
+centroids = samples[1:3]
 labels = [-1 for _ in samples]
 clusters = rand(samples, 3)
 while true
@@ -54,6 +54,27 @@ while true
     iteration += 1
 end
 
+types = [
+    "((,),(,))",
+    "(,(,(,)))",
+    "(,((,),))",
+    "((,(,)),)",
+    "(((,),),)",
+]
+# Functions to extract the coordinates a, b from the distance matrix m
+coordinate_functions = [
+    m -> (1-m[1,2], 1-m[3,4]),
+    m -> (1-m[2,3], m[2,3]-m[3,4]),
+    m -> (1-m[2,4], m[2,3]-m[2,4]),
+    m -> (1-m[1,2], m[2,3]-m[1,2]),
+    m -> (1-m[1,3], m[1,2]-m[1,3])
+] .∘ (1//2*) .∘ cophenetic_matrix
+
+re = r"[t0-9.:;]+"
+gettype(t::PhylogeneticTree) = replace(newick(t), re => "")
+types = findfirst.(isequal.(gettype.(samples)), Ref(types))
+local_coordinates = [coordinate_functions[t](s) for (t, s) in zip(types, samples)]
+
 using Plots
 bases_args = [
     [1//4, 3//4],
@@ -62,26 +83,11 @@ bases_args = [
     [6//4, 15//8],
     [15//8, 1//4]
 ]
-types = [
-    "((,),(,))",
-    "(,(,(,)))",
-    "(,((,),))",
-    "((,(,)),)",
-    "(((,),),)",
-]
-coordinates = [
-    m -> (1-m[1,2], 1-m[3,4]),
-    m -> (1-m[2,3], m[2,3]-m[3,4]),
-    
-]
-re = r"[t0-9.:;]+"
-gettype(t::PhylogeneticTree) = replace(newick(t), re => "")
-
 bases = [exp.(π*im.*b) for b in bases_args]
+canvas_coordinates = [sum(c .* bases[t]) for (t, c) in zip(types, local_coordinates)]
 p = plot(aspect_ratio=:equal, legend=:none, xlims=(-1.5, 1.5), ylims=(-1.5, 1.5))
 for (b, _) in bases
     plot!(p, [0, real(b)], [0, imag(b)], label="", color=:black)
 end
-
-types = findfirst.(isequal.(gettype.(samples)), Ref(types))
-coordinates = 
+p
+scatter!(p, real.(canvas_coordinates), imag.(canvas_coordinates), color=types)
