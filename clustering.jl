@@ -36,18 +36,17 @@ end
 """ Convert a PhylogeneticTree to a vector in ℝᵉ/𝟏ℝ, where e = choose(#leaves, 2)."""
 vech(t::PhylogeneticTree) = vech(cophenetic_matrix(t))
 
+""" Asymmetric tropical distance. """
+function d(y::Vector, x::Vector)
+    sum(y .- x) - length(x)*minimum(y .- x)
+end
+
 function d(x::PhylogeneticTree, y::PhylogeneticTree)
     nx = length(taxa(x))
     ny = length(taxa(y))
     @assert nx == ny "Cannot compare trees with different numbers of leaves."
     d(vech(x), vech(y))
 end
-
-function d(y::Vector, x::Vector)
-    sum(y .- x) - length(x)*minimum(y .- x)
-end
-
-head(x) = x[1]
 
 function normalize(newick_string)
     i = 0
@@ -62,7 +61,7 @@ read_newick_json(filename, do_normalize=false) = (
      |> readlines
      |> join
      |> JSON.parse
-    .|> head
+    .|> first
     .|> strip_parentheses
     .|> (do_normalize ? normalize : identity)
     .|> Base.Fix1(phylogenetic_tree, Float64)
@@ -71,6 +70,7 @@ read_newick_json(filename, do_normalize=false) = (
 samples = read_newick_json("R-Data/newick-100-4.json", true)
 
 Random.seed!(2)
+
 function cluster(samples, k)
     iteration = 1
     centroids = rand(samples, k)
@@ -80,6 +80,7 @@ function cluster(samples, k)
     while true
         old_labels = labels
         labels = [argmin(d(c, s) for c in centroids) for s in samples]
+        push!(iterations, (centroids, labels))
         if(old_labels == labels)
             break
         end
@@ -94,12 +95,11 @@ function cluster(samples, k)
             length(clusters[t]) == 0 && continue
             centroids[t] = tropical_median_consensus(samples[clusters[t]])
         end
-        push!(iterations, (centroids, labels))
         iteration += 1
     end
     iterations
 end
-iterations = cluster(samples, 3)
+iterations = cluster(samples, 9)
 
 # Tools for plotting binary trees on four leaves
 # ==============================================
@@ -145,27 +145,27 @@ function break_ties(newick_string)
     o
 end
 # Extract the index of the type:
-# treetype(t::PhylogeneticTree) = findfirst(isequal(break_ties(typestring(t))), types)
-
+# treetype(t::PhylogeneticTree) = findfirst(isequal(break_ties(typestring                                    
 function treetype(t::PhylogeneticTree)
     v = vech(t)
-    if v[2] == v[3] == v[4] == v[5] == 2.0
+    if all(isapprox.([v[2], v[3], v[4], v[5]], 2.0)) # "(,),(,)"
         return 1
-    elseif v[1] == v[2] == v[3] == 2.0
-        if v[4] == v[5]
+    elseif all(isapprox.([v[1], v[2], v[3]], 2.0))
+        if isapprox(v[4], v[5]) # ",(,(,))"
             return 2
-        elseif v[5] == v[6]
+        elseif isapprox(v[5], v[6]) # ",((,),)"
             return 3
         end
-    elseif v[3] == v[5] == v[6] == 2.0
-        if v[1] == v[2]
+    elseif all(isapprox.([v[3], v[5], v[6]], 2.0))
+        if isapprox(v[1], v[2]) # "(,(,)),"
             return 4
-        elseif v[2] == v[4]
+        elseif isapprox(v[2], v[4]) # "((,),),"
             return 5
         end
     end
     nothing
 end
+
 samples_per_type = mergewith(vcat, Dict{Int64, Vector{Int64}}(), [Dict(treetype(t) => [i]) for (i, t) in enumerate(samples)]...)
 # Assuming all trees have height one, a tree of each type can be represented by two coordinates.
 # The following functions extract the coordinates, depending on type:
@@ -175,7 +175,7 @@ coordinate_functions = [
     m -> [1-m[2,4], m[2,4]-m[2,3]], # a', b'
     m -> [1-m[1,3], m[1,3]-m[2,3]], # a, b'
     m -> [1-m[1,3], m[1,3]-m[1,2]]  # a, b
-] .∘ (t -> .5*cophenetic_matrix(t))
+] .∘ (m -> 1/2 * m) .∘ cophenetic_matrix
 
 function tree_coordinates(tr)
     t = treetype(tr)
@@ -184,7 +184,9 @@ end
 
 treetype_coordinates(t) = isnothing(treetype(t)) ? nothing : (treetype(t), tree_coordinates(t))
 
-local_coordinates(t) = sum(canvas_bases[treetype(t)] .* tree_coordinates(t))
+@assert all(all(tree_coordinates(s) .>= 0) for s in samples) "Local coordinates must be nonnegative."
+
+canvas_coordinates(t) = sum(canvas_bases[treetype(t)] .* tree_coordinates(t))
 
 tree_from_coordinates = Base.Fix1(phylogenetic_tree, Float64) .∘ [
     (b, b′) -> "(t1:$(1-b),t2:$(1-b)):$b,(t3:$(1-b′),t4:$(1-b′)):$b′;",
@@ -193,8 +195,6 @@ tree_from_coordinates = Base.Fix1(phylogenetic_tree, Float64) .∘ [
     (a, b) -> "(t1:$(1-a),(t2:$(1-a-b),t3:$(1-a-b)):$b):$a,t4:1.0;",
     (a, b) -> "((t1:$(1-a-b),t2:$(1-a-b)):$b,t3:$(1-a)):$a,t4:1.0;"
 ]
-
-treetypes = treetype.(samples)
 
 const canvas_bases = [exp.(π*im.*b) for b in [
         [1//4, 3//4],   # b,b''
@@ -221,14 +221,12 @@ function plot_clustering(clusters, p)
     c = treetype.(centroids)
     ms = (!isnothing).(s) 
     mc = (!isnothing).(c)
-    s = local_coordinates.(samples[ms])
-    c = local_coordinates.(centroids[mc])
+    s = canvas_coordinates.(samples[ms])
+    c = canvas_coordinates.(centroids[mc])
     l = labels[ms]
 
-    scatter!(p, real.(s), imag.(s), c=l, 
-             color=col, marker=:circle, markersize=4, label="")
-    scatter!(p, real.(c), imag.(c), c=1:length(c), 
-             color=col, marker=:star, markersize=8, label="")
+    scatter!(p, real.(s), imag.(s), color=1 .+ l       , palette=col, marker=:circle, markersize=4, label="")
+    scatter!(p, real.(c), imag.(c), color=2:1+length(c), palette=col, marker=:star,   markersize=8, label="")
     p
 end
 
@@ -249,11 +247,12 @@ grid_to_canvas(i, j) = (
     ylim[1] + (j - 1) / res
 )
 
-# inverse of complex 1x2 vector, considered as real 2x2 matrix.
-
 inv_basis((b1, b2)) = inv([real(b1) real(b2); imag(b1) imag(b2)])
 
+""" Convert coordinates in the canvas to coordinates in a cell, if the coordinates lie in the cell `t`.
+    If the coordinates do not lie in any cell, return `nothing`."""
 function canvas_to_treetype_coordinates(x, y)    
+    # Find the cell in which the projection of (x,y) in local coordinates is nonnegative.
     for (t, b) in enumerate(canvas_bases)
         u, v = inv_basis(b) * [x; y]
         if ((t == 1 && 0 <= u <= 1 && 0 <= v <= 1)
@@ -264,8 +263,7 @@ function canvas_to_treetype_coordinates(x, y)
     return nothing
 end
 
-centroids = iterations[end][1]
-grid_of_trees = Array{Union{Vector{Float64}, Nothing}}(nothing, Int.(res .* (xlim[2] - xlim[1], ylim[2] - ylim[1])))
+grid_of_trees = Array{Union{Vector{Float64}, Nothing}}(nothing, Int.(ceil.(res .* (xlim[2] - xlim[1], ylim[2] - ylim[1]))))
 for i in axes(grid_of_trees, 1), j in axes(grid_of_trees, 2)
     x, y = grid_to_canvas(i, j)
     r = canvas_to_treetype_coordinates(x, y)
@@ -276,17 +274,36 @@ end
 
 
 
-xs = xlim[1] .+ (0:size(grid, 1)-1) ./ res
-ys = ylim[1] .+ (0:size(grid, 2)-1) ./ res
-
+xs = xlim[1] .+ (0:size(grid_of_trees, 1)-1) ./ res
+ys = ylim[1] .+ (0:size(grid_of_trees, 2)-1) ./ res
+hm = nothing
 for clusters in iterations
     centroids, labels = clusters
+    centroids = vech.(centroids)
     hm = [
-        isnothing(tr) ? 0 : argmin(d(c, tr) 
-        for c in vech.(centroids)) 
-        for tr in grid_of_trees
+        isnothing(s) ? 0 : argmin(d(c, s) for c in centroids) 
+        for s in grid_of_trees
     ]
-    p = heatmap(xs, ys, transpose(hm), aspect_ratio=:equal, color=col, cmin=-.5, clim=(-.5, 9.5), alpha=.5)
+    p = heatmap(xs, ys, transpose(hm), aspect_ratio=:equal, color=col, cmin=-.5, clim=(-.5, 9.5), alpha=.2, size=(800,800))
+    # hm = [
+    #     isnothing(s) ? 0 : minimum(d(c, s) for c in centroids)
+    #     for s in grid_of_trees
+    # ]
+    # hm = [
+    #     isnothing(s) ? 0 : sum(d(s, vech(t)) for (t, l) in zip(samples, labels) if l == 1)#argmin(d(c, s) for c in centroids))
+    #     for s in grid_of_trees
+    # ]
+    # p = contour(xs, ys, transpose(hm), aspect_ratio=:equal, levels=50, size=(800, 800))
     plot_clustering(clusters, p)
     display(p)
+end
+
+random()
+
+samples = PhylogeneticTree{Float64}[]
+for s in eachrow(rand(100,2) .* [xlim[2]-xlim[1] ylim[2]-ylim[1]] .+ [xlim[1] ylim[1]])
+       u = canvas_to_treetype_coordinates(s...)
+       isnothing(u) && continue
+       (t, (a, b)) = u
+       push!(samples, tree_from_coordinates[t](a, b))
 end
