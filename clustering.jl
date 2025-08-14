@@ -1,6 +1,7 @@
-using Oscar, LinearAlgebra, Plots, JSON, OrderedCollections, Random
+using Oscar, LinearAlgebra, Plots, JSON, OrderedCollections, Random, StatsBase 
 import Oscar: PhylogeneticTree
 const col = palette(:tab10)
+const col0 = palette([:black])
 
 """ Like `first`, but returns `default` if the iterator is empty."""
 function firstd(iter, default=nothing)
@@ -37,7 +38,7 @@ end
 vech(t::PhylogeneticTree) = vech(cophenetic_matrix(t))
 
 """ Asymmetric tropical distance. """
-function d(y::Vector, x::Vector)
+function d(x::Vector, y::Vector)
     sum(y .- x) - length(x)*minimum(y .- x)
 end
 
@@ -71,35 +72,50 @@ samples = read_newick_json("R-Data/newick-100-4.json", true)
 
 Random.seed!(2)
 
-function cluster(samples, k)
-    iteration = 1
-    centroids = rand(samples, k)
-    labels = [-1 for _ in samples]
-    clusters = [Int[] for _ in centroids]
+function find_centroids(samples, k; d=d)
+    cs = Vector{PhylogeneticTree}(undef, k)
+    cs[1] = rand(samples)
+    ds = d.(Ref(cs[1]), samples)
+    for i in 2:k
+        cs[i] = sample(samples, pweights(ds))
+        ds = min.(ds, d.(Ref(cs[i]), samples))
+    end
+    return cs
+end
+
+""" k-means-clustering w.r.t. the distance function `d`.
+    Either provide `centroids` as a vector of indices into `samples`, or an integer.
+    In the latter case, the function samples `centroids` many centroids at random."""
+function cluster(samples, centroids::Union{Int, Vector{Int}}; d=d)
+    cs = centroids isa Int ? find_centroids(samples, centroids; d=d) : samples[centroids]
+    labels = fill(-1, length(samples))
+    clusters = [Int[] for _ in cs]
     iterations = Tuple{Vector{PhylogeneticTree}, Vector{Int64}}[]
+    iteration = 1
     while true
         old_labels = labels
-        labels = [argmin(d(c, s) for c in centroids) for s in samples]
-        push!(iterations, (centroids, labels))
-        if(old_labels == labels)
+        labels = [argmin(d(c, s) for c in cs) for s in samples]
+        push!(iterations, (cs, labels))
+        if old_labels == labels
             break
         end
-        println("Iteration: ", iteration)
+        print("Iteration: ", iteration)
         for c in clusters
             empty!(c)
         end
         for (i, l) in enumerate(labels)
             push!(clusters[l], i)
         end
-        for t in eachindex(centroids)
+        for t in eachindex(cs)
             length(clusters[t]) == 0 && continue
-            centroids[t] = tropical_median_consensus(samples[clusters[t]])
+            cs[t] = tropical_median_consensus(samples[clusters[t]])
         end
+        println("; d = ", sum(d(cs[labels[i]], s) for (i, s) in enumerate(samples)))
         iteration += 1
     end
     iterations
 end
-iterations = cluster(samples, 9)
+iterations = cluster(samples, 5);
 
 # Tools for plotting binary trees on four leaves
 # ==============================================
@@ -277,6 +293,7 @@ end
 xs = xlim[1] .+ (0:size(grid_of_trees, 1)-1) ./ res
 ys = ylim[1] .+ (0:size(grid_of_trees, 2)-1) ./ res
 hm = nothing
+plots = []
 for clusters in iterations
     centroids, labels = clusters
     centroids = vech.(centroids)
@@ -284,22 +301,17 @@ for clusters in iterations
         isnothing(s) ? 0 : argmin(d(c, s) for c in centroids) 
         for s in grid_of_trees
     ]
-    p = heatmap(xs, ys, transpose(hm), aspect_ratio=:equal, color=col, cmin=-.5, clim=(-.5, 9.5), alpha=.2, size=(800,800))
-    # hm = [
-    #     isnothing(s) ? 0 : minimum(d(c, s) for c in centroids)
-    #     for s in grid_of_trees
-    # ]
-    # hm = [
-    #     isnothing(s) ? 0 : sum(d(s, vech(t)) for (t, l) in zip(samples, labels) if l == 1)#argmin(d(c, s) for c in centroids))
-    #     for s in grid_of_trees
-    # ]
-    # p = contour(xs, ys, transpose(hm), aspect_ratio=:equal, levels=50, size=(800, 800))
+    p = heatmap(xs, ys, transpose(hm), aspect_ratio=:equal, color=col, cmin=-.5, clim=(-.5, 9.5), alpha=.2, legend=false)
+    hm = [
+        isnothing(s) ? 0 : minimum(d(c, s) for c in centroids)
+        for s in grid_of_trees
+    ]
+    contour!(p, xs, ys, transpose(hm), aspect_ratio=:equal, levels=50, color=col0, alpha=.5)
     plot_clustering(clusters, p)
-    display(p)
 end
+plot(plots[1:4]..., layout=(1,4), legend=false, size=(800*length(plots),800))
 
-random()
-
+# %% Symthetic data
 samples = PhylogeneticTree{Float64}[]
 for s in eachrow(rand(100,2) .* [xlim[2]-xlim[1] ylim[2]-ylim[1]] .+ [xlim[1] ylim[1]])
        u = canvas_to_treetype_coordinates(s...)
@@ -307,3 +319,40 @@ for s in eachrow(rand(100,2) .* [xlim[2]-xlim[1] ylim[2]-ylim[1]] .+ [xlim[1] yl
        (t, (a, b)) = u
        push!(samples, tree_from_coordinates[t](a, b))
 end
+
+
+# %% Apicomplexa
+
+""" Make a phylogenetic tree equidistant by adding sufficient lengths to the edges
+    adjacent to the leaves. All lengths of interiour edges remain the same. """
+function make_equidistant(tree::PhylogeneticTree)
+    graph = adjacency_tree(tree)
+    edge_lengths = tree.pm_ptree.EDGE_LENGTHS;
+    height = tree.pm_ptree.NODE_HEIGHTS[1]
+    leaf_indices = Dict(tree.pm_ptree.LEAVES[t]+1 => i for (i, t) in enumerate(taxa(tree)))
+    m = cophenetic_matrix(tree)
+    function f(v, h)
+        for w in outneighbors(graph, v)
+            h′ = h + edge_lengths[Edge(v, w)]
+            if outdegree(graph, w) == 0
+                j = leaf_indices[w]
+                m[:,j] .+= height - h′
+                m[j,:] .+= height - h′
+                m[j,j]  -= 2*(height - h′)
+            else
+                f(w, h′)
+            end
+        end
+    end
+    f(1, 0.0)
+    new_tree = phylogenetic_tree(m, taxa(tree))
+    @assert is_equidistant(new_tree) "The new tree is not equidistant."
+    return new_tree
+end
+
+samples = (open("R-Data/apicomplexa.txt")
+     |> readlines
+    .|> (s -> phylogenetic_tree(Float64, s))
+    .|> make_equidistant
+)
+cluster(samples, 5)
