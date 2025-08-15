@@ -94,7 +94,7 @@ function cluster(samples, centroids::Union{Int, Vector{Int}}; d=d)
     iteration = 1
     while true
         old_labels = labels
-        labels = [argmin(d(c, s) for c in cs) for s in samples]
+        labels = [argmin(d(s, c) for c in cs) for s in samples]
         push!(iterations, (cs, labels))
         if old_labels == labels
             break
@@ -110,7 +110,7 @@ function cluster(samples, centroids::Union{Int, Vector{Int}}; d=d)
             length(clusters[t]) == 0 && continue
             cs[t] = tropical_median_consensus(samples[clusters[t]])
         end
-        println("; d = ", sum(d(cs[labels[i]], s) for (i, s) in enumerate(samples)))
+        println("; d = ", sum(d(s, cs[labels[i]]) for (i, s) in enumerate(samples)))
         iteration += 1
     end
     iterations
@@ -298,12 +298,12 @@ for clusters in iterations
     centroids, labels = clusters
     centroids = vech.(centroids)
     hm = [
-        isnothing(s) ? 0 : argmin(d(c, s) for c in centroids) 
+        isnothing(s) ? 0 : argmin(d(s, c) for c in centroids) 
         for s in grid_of_trees
     ]
     p = heatmap(xs, ys, transpose(hm), aspect_ratio=:equal, color=col, cmin=-.5, clim=(-.5, 9.5), alpha=.2, legend=false)
     hm = [
-        isnothing(s) ? 0 : minimum(d(c, s) for c in centroids)
+        isnothing(s) ? 0 : minimum(d(s, c) for c in centroids)
         for s in grid_of_trees
     ]
     contour!(p, xs, ys, transpose(hm), aspect_ratio=:equal, levels=50, color=col0, alpha=.5)
