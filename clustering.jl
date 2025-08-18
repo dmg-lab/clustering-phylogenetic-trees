@@ -381,7 +381,10 @@ samples = (open("R-Data/apicomplexa.txt")
 Random.seed!(3)
 iterations = cluster(samples, 9);
 
-save("pathological_tree_example.json", (cophenetic_matrix.(samples), taxa.(samples), cntrs_))
-s, t, c = load("pathological_tree_example.json")
-s = phylogenetic_tree.(s, t)
-cluster(s, c);
+# %% Consensus tree bug
+f(m, t) = phylogenetic_tree(m, t)
+t, s = load("consensus_tree_bug.json")
+t, s = f(t...), [f(a, b) for (a, b) in s]
+m = tropical_median_consensus(s)
+sum(d.(s, Ref(t)))
+sum(d.(s, Ref(m)))
