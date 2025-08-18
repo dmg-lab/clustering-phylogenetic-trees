@@ -385,6 +385,28 @@ iterations = cluster(samples, 9);
 f(m, t) = phylogenetic_tree(m, t)
 t, s = load("consensus_tree_bug.json")
 t, s = f(t...), [f(a, b) for (a, b) in s]
+@assert length(unique(taxa.(s))) == 1 "All trees must have the same taxa."
 m = tropical_median_consensus(s)
 sum(d.(s, Ref(t)))
 sum(d.(s, Ref(m)))
+
+# Build and solve the corresponding LP directly, without using `tropical_median_consensus`.
+V = transpose(stack(vech.(s)))
+m, n = size(V)
+M = zeros(m*n+2, m+n)
+for i in 1:m, j in 1:n
+    M[(i-1) * n + j, i] = 1.0
+    M[(i-1) * n + j, m + j] = 1.0
+end
+M[end-1, m+1:end] .=  1
+M[end  , m+1:end] .= -1
+v = [reshape(transpose(V), m*n); 0; 0]
+E = polyhedron(-M, -v)
+l = ones(m + n)
+is_feasible(E)
+LP = linear_program(E, l; convention=:min)
+r, tx = solve_lp(LP)
+t = tx[1:m]
+x = tx[m+1:end]
+tree = phylogenetic_tree(vech_to_matrix(x), taxa(s[1]))
+sum(d.(s, Ref(tree)))
