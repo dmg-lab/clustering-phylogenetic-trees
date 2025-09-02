@@ -345,29 +345,40 @@ display.(plot_clusters.(iterations));
 
 
 # %% Apicomplexa
+leaq(a,b) = (a <= b) || isapprox(a, b)
+is_ultrametric(m::Matrix{Float64}) = all(leaq(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
+is_ultrametric(m::Matrix{QQFieldElem}) = all(<=(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
 
 """ Make a phylogenetic tree equidistant by adding sufficient lengths to the edges
     adjacent to the leaves. All lengths of interiour edges remain the same. """
-function make_equidistant(tree::PhylogeneticTree)
+function make_equidistant(tree::PhylogeneticTree{T}) where T
     graph = adjacency_tree(tree)
     edge_lengths = tree.pm_ptree.EDGE_LENGTHS;
     height = tree.pm_ptree.NODE_HEIGHTS[1]
     leaf_indices = Dict(tree.pm_ptree.LEAVES[t]+1 => i for (i, t) in enumerate(taxa(tree)))
     m = cophenetic_matrix(tree)
+    # The following function traverses the tree in DFS order, starting at the root (node 1).
+    # It keeps track of the height `h` of the current node, and whenever it reaches a leaf,
+    # it adds `height - h` to the corresponding row and column of `m`, extending the edge
+    # to this leave by this difference.
     function f(v, h)
         for w in outneighbors(graph, v)
             h′ = h + edge_lengths[Edge(v, w)]
             if outdegree(graph, w) == 0
                 j = leaf_indices[w]
-                m[:,j] .+= height - h′
-                m[j,:] .+= height - h′
-                m[j,j]  -= 2*(height - h′)
+                l = convert(T, height - h′)
+                for i in 1:size(m, 1)
+                    m[i,j] += l
+                    m[j,i] += l
+                end
+                m[j,j]  -= 2l
             else
                 f(w, h′)
             end
         end
     end
-    f(1, 0.0)
+    f(1, zero(height))
+    @assert is_ultrametric(m) "The new distance matrix is not ultrametric."
     new_tree = phylogenetic_tree(m, taxa(tree))
     @assert is_equidistant(new_tree) "The new tree is not equidistant."
     return new_tree
@@ -375,9 +386,10 @@ end
 
 samples = (open("R-Data/apicomplexa.txt")
      |> readlines
-    .|> (s -> phylogenetic_tree(Float64, s))
+    .|> (s -> phylogenetic_tree(QQFieldElem, s))
     .|> make_equidistant
 )
+make_equidistant(samples[1])
 Random.seed!(3)
 iterations = cluster(samples, 9);
 
@@ -385,10 +397,11 @@ iterations = cluster(samples, 9);
 f(m, t) = phylogenetic_tree(m, t)
 t, s = load("consensus_tree_bug.json")
 t, s = f(t...), [f(a, b) for (a, b) in s]
-@assert length(unique(taxa.(s))) == 1 "All trees must have the same taxa."
-tmc = tropical_median_consensus(s)
+@assert length(unique(taxa.(s))) == 1 "All trees must have the same taxa.false"
+s = samples[l]
+m = tropical_median_consensus(s)
 sum(d.(s, Ref(t)))
-sum(d.(s, Ref(tmc)))
+sum(d.(s, Ref(m)))
 
 # Build and solve the corresponding LP directly, without using `tropical_median_consensus`.
 V = transpose(stack(vech.(s)))
