@@ -1,0 +1,136 @@
+include("clustering.jl")
+# %% Apicomplexa
+leaq(a,b; kwargs) = (a <= b) || isapprox(a, b; kwargs)
+is_ultrametric(m::Matrix{Float64}) = is_symmetric(m) && iszero(diag(m)) && all(leaq(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
+is_ultrametric(m::Matrix{QQFieldElem}) = is_symmetric(m) && all(<=(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
+
+""" Make a phylogenetic tree equidistant by adding sufficient lengths to the edges
+    adjacent to the leaves. All lengths of interiour edges remain the same. """
+function make_equidistant(tree::PhylogeneticTree{T}) where T
+    graph = adjacency_tree(tree)
+    edge_lengths = tree.pm_ptree.EDGE_LENGTHS;
+    height = tree.pm_ptree.NODE_HEIGHTS[1]
+    leaf_indices = Dict(tree.pm_ptree.LEAVES[t]+1 => i for (i, t) in enumerate(taxa(tree)))
+    m = cophenetic_matrix(tree)
+    # The following function traverses the tree in DFS order, starting at the root (node 1).
+    # It keeps track of the height `h` of the current node, and whenever it reaches a leaf,
+    # it adds `height - h` to the corresponding row and column of `m`, extending the edge
+    # to this leave by this difference.
+    function f(v, h)
+        for w in outneighbors(graph, v)
+            h′ = h + edge_lengths[Edge(v, w)]
+            if outdegree(graph, w) == 0
+                j = leaf_indices[w]
+                l = convert(T, height - h′)
+                for i in 1:size(m, 1)
+                    m[i,j] += l
+                    m[j,i] += l
+                end
+                m[j,j]  -= 2l
+            else
+                f(w, h′)
+            end
+        end
+    end
+    f(1, zero(height))
+    @assert is_ultrametric(m) "The new distance matrix is not ultrametric."
+    new_tree = phylogenetic_tree(m, taxa(tree))
+    @assert is_equidistant(new_tree) "The new tree is not equidistant."
+    return new_tree
+end
+
+# %% Consensus tree bug
+samples = (open("R-Data/apicomplexa.txt")
+     |> readlines
+    .|> (s -> phylogenetic_tree(QQFieldElem, s))
+    .|> make_equidistant
+)[load("R-Data/apicomplexa_path_subset.txt")]
+
+@time m = tropical_median_consensus(samples)
+sum(d.(s, Ref(m)))
+
+# Build and solve the corresponding LP directly, without using `tropical_median_consensus`.
+V = transpose(stack(vech.(s)))
+m, n = size(V)
+hDiff = sum.([V[i,:]/n for i in 1:m])
+for i in 1:m
+    for j in 1:n
+        V[i,j] -= hDiff[i]
+    end
+end
+M = zeros(m*n+2, m+n)
+for i in 1:m, j in 1:n
+    M[(i-1) * n + j, i] = 1.0
+    M[(i-1) * n + j, m + j] = 1.0
+end
+M[end-1, m+1:end] .=  1
+M[end  , m+1:end] .= -1
+v = [reshape(transpose(V), m*n); 0; 0]
+E = polyhedron(-M, -v)
+l = vcat(n*ones(m), zeros(n))
+is_feasible(E)
+LP = linear_program(E, l; convention=:min)
+r, tx = solve_lp(LP)
+t = tx[1:m]
+x = tx[m+1:end]
+tree = phylogenetic_tree(vech_to_matrix(x), taxa(s[1]))
+sum(d.(s, Ref(tree)))
+
+# reduce sample size
+for i in 1:84-27
+    a, b = i, 27+i
+    tmc = tropical_median_consensus(s[a:b])
+
+    V = transpose(stack(vech.(s[a:b])))
+    m, n = size(V)
+    M = zeros(m*n+2, m+n)
+    for i in 1:m, j in 1:n
+        M[(i-1) * n + j, i] = 1.0
+        M[(i-1) * n + j, m + j] = 1.0
+    end
+    M[end-1, m+1:end] .=  1
+    M[end  , m+1:end] .= -1
+    v = [reshape(transpose(V), m*n); 0; 0]
+    E = polyhedron(-M, -v)
+    l = vcat(n*ones(m), zeros(n))
+    LP = linear_program(E, l; convention=:min)
+    r, tx = solve_lp(LP)
+    t = tx[1:m]
+    x = tx[m+1:end]
+    tree = phylogenetic_tree(vech_to_matrix(x), taxa(s[1]))
+
+
+    if sum(d.(s[a:b], Ref(tmc))) - sum(d.(s[a:b], Ref(tree))) > 1
+        println(i)
+    end
+end
+
+# reconstruct polymake side for a,b = 1,28
+# Note that if we compare the resulting cophenetic matrices
+cophenetic_matrix(tree) 
+cophenetic_matrix(tmc)
+# particularly the entries [6,8] and [7,8] in the c. matrix of tmc are significantly bigger than those of tree (even after subtracting the constant factor that Andrei adds)
+S = zeros(28,28) # essentially V 
+for k in 1:8
+    for (i,j) in combinations(1:8,2)
+            S[k,8*(i-1) - Int(i*(i+1)//2)+ j] = cophenetic_matrix(s[k])[i,j]
+    end
+end
+# As expected, when comparing the result of the tropical_median function with x above the last two entries diverge significantly after making up for the 
+tm = Vector(Polymake.call_function(:tropical,:tropical_median, S))
+filter(i -> abs(tm[i] - x[i]) > 1, 1:28)
+
+# debugging tropical_median
+# 1. computing tropical vertices
+m, n = 28, 28
+supply = n*ones(m); demand = m*ones(n)
+flowMatrix = Polymake.call_function(:graph,:optimal_transport_plan, -S, supply, demand)
+trop_vert = Polymake.call_function(:tropical, :facets_matrix, S, flowMatrix)
+# 2. computing the average of the tropical vertices
+tm = zeros(n)
+r, c = size(trop_vert)
+for i in 1:c
+    tm[i] = 1/r*(sum(trop_vert[:,i]))
+end
+# The result is similar to the result of the tropical_median function in polymake (up to adding some multiple of the all ones vector)
+# The problem must be in the computation of the tropical vertices then
