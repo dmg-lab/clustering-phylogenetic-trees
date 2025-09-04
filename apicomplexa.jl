@@ -2,7 +2,7 @@ include("clustering.jl")
 # %% Apicomplexa
 leaq(a,b; kwargs) = (a <= b) || isapprox(a, b; kwargs)
 is_ultrametric(m::Matrix{Float64}) = is_symmetric(m) && iszero(diag(m)) && all(leaq(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
-is_ultrametric(m::Matrix{QQFieldElem}) = is_symmetric(m) && all(<=(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
+is_ultrametric(m::QQMatrix) = is_symmetric(m) && all(<=(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
 
 """ Make a phylogenetic tree equidistant by adding sufficient lengths to the edges
     adjacent to the leaves. All lengths of interiour edges remain the same. """
@@ -46,8 +46,32 @@ samples = (open("R-Data/apicomplexa.txt")
     .|> make_equidistant
 )[load("R-Data/apicomplexa_path_subset.txt")]
 
+function shift_to_H(tree::PhylogeneticTree{T}) where T
+    v = vech(tree)
+    n = length(v)
+    h = sum(v) / n
+    v .-= h
+    m = T == Float64 ? vech_to_matrix(v) : matrix(vech_to_matrix(v))
+    phylogenetic_tree(m, taxa(tree))
+end
 @time m = tropical_median_consensus(samples)
 sum(d.(s, Ref(m)))
+
+tropical_median_consensus2(trees::PhylogeneticTree)
+    t = only(unique(taxa.(trees)))
+    n = length(t)
+    n = n * (n - 1) ÷ 2
+    coords = vech.(trees)
+    for c in coords
+        c .-= sum(c) / n
+    end
+    @assert all(iszero.(sum.(coords)))
+    m = Polymake.tropical.tropical_median(collect(transpose(stack(coords))))
+    m .-= minimum(m)+1
+    phylogenetic_tree(m, t)
+end
+
+
 
 # Build and solve the corresponding LP directly, without using `tropical_median_consensus`.
 V = transpose(stack(vech.(s)))

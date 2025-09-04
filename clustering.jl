@@ -22,17 +22,24 @@ function vech(A::AbstractMatrix{T}) where T
     return v
 end
 
+vech(A::QQMatrix) = vech(collect(A))
+
 """ Convert a vector to a symmetric matrix, in row-major order, with diagonals set to zero."""
-function vech_to_matrix(v::AbstractVector{T}) where T
+vech_to_matrix(v::AbstractVector) = vech_to_matrix_internal(v)
+
+vech_to_matrix(v::AbstractVector{QQFieldElem}) = matrix(vech_to_matrix_internal(v))
+
+function vech_to_matrix_internal(v::AbstractVector{T}) where T
     n = Int((sqrt(1 + 8*length(v)) + 1) ÷ 2)
     @assert n * (n - 1) ÷ 2 == length(v) "Vector length must be n(n-1)/2 for some n."
-    A = zeros(T, (n, n))
+    A = zeros(T, n, n)
     k = 0
     for i in 1:n, j in i+1:n
         @inbounds A[j, i] = A[i, j] = v[k += 1]
     end
     return A
 end
+
 
 """ Convert a PhylogeneticTree to a vector in ℝᵉ/𝟏ℝ, where e = choose(#leaves, 2)."""
 vech(t::PhylogeneticTree) = vech(cophenetic_matrix(t))
