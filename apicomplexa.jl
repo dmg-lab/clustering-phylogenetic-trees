@@ -1,7 +1,9 @@
 include("clustering.jl")
 # %% Apicomplexa
-leaq(a,b; kwargs) = (a <= b) || isapprox(a, b; kwargs)
+leaq(a,b; kwargs...) = (a <= b) || isapprox(a, b; kwargs...)
+
 is_ultrametric(m::Matrix{Float64}) = is_symmetric(m) && iszero(diag(m)) && all(leaq(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
+
 is_ultrametric(m::QQMatrix) = is_symmetric(m) && all(<=(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
 
 """ Make a phylogenetic tree equidistant by adding sufficient lengths to the edges
@@ -39,67 +41,78 @@ function make_equidistant(tree::PhylogeneticTree{T}) where T
     return new_tree
 end
 
-# %% Consensus tree bug
-samples = (open("R-Data/apicomplexa.txt")
+normalize_cophenetric_matrix(m) = vech_to_matrix(vech(m) .- mean(vech(m)))
+
+# Apicomplexa data set
+samples = (open("../R-Data/apicomplexa.txt")
      |> readlines
-    .|> (s -> phylogenetic_tree(QQFieldElem, s))
+    .|> (s -> phylogenetic_tree(Float64, s))
     .|> make_equidistant
-)[load("R-Data/apicomplexa_path_subset.txt")]
+)
 
-function shift_to_H(tree::PhylogeneticTree{T}) where T
-    v = vech(tree)
-    n = length(v)
-    h = sum(v) / n
-    v .-= h
-    m = T == Float64 ? vech_to_matrix(v) : matrix(vech_to_matrix(v))
-    phylogenetic_tree(m, taxa(tree))
-end
-@time m = tropical_median_consensus(samples)
-sum(d.(s, Ref(m)))
+# Consensus tree bug
+pathological_indices = load("../R-Data/apicomplexa_path_subset.txt")
+samples = samples[pathological_indices]
 
-tropical_median_consensus2(trees::PhylogeneticTree)
+# reduce sample size for testing
+samples = samples[1:50]
+
+# Tropical median consensus tree via Andrei's implementation
+@time mt1 = tropical_median_consensus(samples)
+@assert is_equidistant(mt1)
+display(normalize_cophenetric_matrix(cophenetic_matrix(mt1)))
+Float64(sum(d.(samples, Ref(mt1))))
+
+# Alternative implementations of tropical median consensus tree, using `troipical_median` directly
+function tropical_median_consensus2(trees::AbstractVector{PhylogeneticTree{T}}) where T
     t = only(unique(taxa.(trees)))
-    n = length(t)
-    n = n * (n - 1) ÷ 2
-    coords = vech.(trees)
-    for c in coords
-        c .-= sum(c) / n
+    mat = collect(transpose(stack(vech.(trees))))
+    mat .-= mean(mat, dims=2)
+    sol = Polymake.tropical.tropical_median(mat)
+    sol .-= minimum(sol)
+    mat = [convert(T, c) for c in sol]
+    phylogenetic_tree(vech_to_matrix(mat), t)
+end
+
+@time mt2 = tropical_median_consensus2(samples)
+@assert is_equidistant(mt2)
+display(normalize_cophenetic_matrix(cophenetic_matrix(mt2)))
+Float64(sum(d.(samples, Ref(mt2))))
+
+# Alternative implementation of tropical median consensus tree, via linear programming
+function tropical_median_consensus3(trees::AbstractVector{PhylogeneticTree{T}}) where T
+    t = only(unique(taxa.(trees)))
+    # Build and solve the corresponding LP directly, without using `tropical_median_consensus`.
+    V = transpose(stack(vech.(trees)))
+    m, n = size(V)
+    V .-= mean(V, dims=2)
+    M = T == Float64 ? zeros(m*n+2, m+n) : zero_matrix(QQ, m*n+2, m+n)
+    for i in 1:m, j in 1:n
+        M[(i-1) * n + j, i] = 1
+        M[(i-1) * n + j, m + j] = 1
     end
-    @assert all(iszero.(sum.(coords)))
-    m = Polymake.tropical.tropical_median(collect(transpose(stack(coords))))
-    m .-= minimum(m)+1
-    phylogenetic_tree(m, t)
+    M[end-1, m+1:end] .=  1
+    M[end  , m+1:end] .= -1
+    v = [reshape(transpose(V), m*n); 0; 0]
+    E = polyhedron(-M, -v)
+    l = vcat(fill(n*one(T), m), fill(zero(T), n))
+    @assert is_feasible(E)
+    LP = linear_program(E, l; convention=:min)
+    _, tx = solve_lp(LP)
+    t = tx[1:m]
+    x = tx[m+1:end]
+    tree = phylogenetic_tree(vech_to_matrix(x), t)
+    return tree
 end
 
+@time t3 = tropical_median_consensus3(samples)
+display(normalize_cophenetric_matrix(cophenetic_matrix(t3)))
+sum(d.(samples, Ref(t3)))
 
 
-# Build and solve the corresponding LP directly, without using `tropical_median_consensus`.
-V = transpose(stack(vech.(s)))
-m, n = size(V)
-hDiff = sum.([V[i,:]/n for i in 1:m])
-for i in 1:m
-    for j in 1:n
-        V[i,j] -= hDiff[i]
-    end
-end
-M = zeros(m*n+2, m+n)
-for i in 1:m, j in 1:n
-    M[(i-1) * n + j, i] = 1.0
-    M[(i-1) * n + j, m + j] = 1.0
-end
-M[end-1, m+1:end] .=  1
-M[end  , m+1:end] .= -1
-v = [reshape(transpose(V), m*n); 0; 0]
-E = polyhedron(-M, -v)
-l = vcat(n*ones(m), zeros(n))
-is_feasible(E)
-LP = linear_program(E, l; convention=:min)
-r, tx = solve_lp(LP)
-t = tx[1:m]
-x = tx[m+1:end]
-tree = phylogenetic_tree(vech_to_matrix(x), taxa(s[1]))
-sum(d.(s, Ref(tree)))
 
+# More debugging stuff (Lena)
+# ===========================
 # reduce sample size
 for i in 1:84-27
     a, b = i, 27+i
@@ -131,16 +144,16 @@ end
 
 # reconstruct polymake side for a,b = 1,28
 # Note that if we compare the resulting cophenetic matrices
-cophenetic_matrix(tree) 
+cophenetic_matrix(tree)
 cophenetic_matrix(tmc)
 # particularly the entries [6,8] and [7,8] in the c. matrix of tmc are significantly bigger than those of tree (even after subtracting the constant factor that Andrei adds)
-S = zeros(28,28) # essentially V 
+S = zeros(28,28) # essentially V
 for k in 1:8
     for (i,j) in combinations(1:8,2)
             S[k,8*(i-1) - Int(i*(i+1)//2)+ j] = cophenetic_matrix(s[k])[i,j]
     end
 end
-# As expected, when comparing the result of the tropical_median function with x above the last two entries diverge significantly after making up for the 
+# As expected, when comparing the result of the tropical_median function with x above the last two entries diverge significantly after making up for the
 tm = Vector(Polymake.call_function(:tropical,:tropical_median, S))
 filter(i -> abs(tm[i] - x[i]) > 1, 1:28)
 
