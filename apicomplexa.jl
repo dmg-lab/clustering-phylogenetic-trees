@@ -44,23 +44,6 @@ end
 """ Shift a cophenetic matrix onto the hyperplane H = {x | ∑ᵢxᵢ=0}. """
 normalize_cophenetic_matrix(m) = vech_to_matrix(vech(m) .- mean(vech(m)))
 
-# Apicomplexa data set
-samples = (open("R-Data/apicomplexa.txt")
-     |> readlines
-     |> Base.Fix2(getindex, load("R-Data/apicomplexa_path_subset.txt")) # Subset that causes the problem to appear
-    .|> (s -> phylogenetic_tree(Float64, s))
-    .|> make_equidistant
-)
-
-# reduce sample size for testing
-samples = samples[1:25]
-
-# Tropical median consensus tree via Andrei's implementation
-@time mt1 = tropical_median_consensus(samples)
-@assert is_equidistant(mt1)
-nm1 = normalize_cophenetic_matrix(cophenetic_matrix(mt1))
-d1 = Float64(sum(d.(samples, Ref(mt1))))
-
 # Alternative implementations of tropical median consensus tree, using `troipical_median` directly
 function tropical_median_consensus2(trees::AbstractVector{PhylogeneticTree{T}}) where T
     t = only(unique(taxa.(trees)))
@@ -72,11 +55,6 @@ function tropical_median_consensus2(trees::AbstractVector{PhylogeneticTree{T}}) 
     @assert is_ultrametric(mat) "The resulting cophenetic matrix is not ultrametric: $mat"
     phylogenetic_tree(mat, t)
 end
-
-@time mt2 = tropical_median_consensus2(samples)
-@assert is_equidistant(mt2)
-nm2 = normalize_cophenetic_matrix(cophenetic_matrix(mt2))
-d2 = Float64(sum(d.(samples, Ref(mt2))))
 
 # Alternative implementation of tropical median consensus tree, via linear programming
 function tropical_median_consensus3(trees::AbstractVector{PhylogeneticTree{T}}) where T
@@ -100,78 +78,38 @@ function tropical_median_consensus3(trees::AbstractVector{PhylogeneticTree{T}}) 
     _, tx = solve_lp(LP)
     _ = tx[1:m]
     x = tx[m+1:end]
-    tree = phylogenetic_tree(vech_to_matrix(x), t)
+    mat = vech_to_matrix(x)
+    @assert is_ultrametric(mat) "The resulting cophenetic matrix is not ultrametric."
+    tree = phylogenetic_tree(mat, t)
     return tree
 end
+
+# TEST
+# ====
+
+
+# Apicomplexa data set
+samples = (open("R-Data/apicomplexa.txt")
+     |> readlines
+     |> Base.Fix2(getindex, load("R-Data/apicomplexa_path_subset.txt")) # Subset that causes the problem to appear
+    .|> (s -> phylogenetic_tree(Float64, s)) # <== also try with QQFieldElem
+    .|> make_equidistant
+)
+
+# reduce sample size for testing
+samples = samples[1:25] # <== also try without this line
+
+# Tropical median consensus tree via Andrei's implementation
+@time mt1 = tropical_median_consensus(samples)
+@assert is_equidistant(mt1)
+nm1 = normalize_cophenetic_matrix(cophenetic_matrix(mt1))
+d1 = Float64(sum(d.(samples, Ref(mt1))))
+
+@time mt2 = tropical_median_consensus2(samples)
+@assert is_equidistant(mt2)
+nm2 = normalize_cophenetic_matrix(cophenetic_matrix(mt2))
+d2 = Float64(sum(d.(samples, Ref(mt2))))
 
 @time mt3 = tropical_median_consensus3(samples)
 nm3 = normalize_cophenetic_matrix(cophenetic_matrix(mt3))
 d3 = sum(d.(samples, Ref(mt3)))
-
-isapprox.(nm1, nm2)
-isapprox.(nm1, nm3)
-isapprox.(nm2, nm3)
-isapprox(d1, d2)
-isapprox(d1, d3)
-isapprox(d2, d3)
-
-# More debugging stuff (Lena)
-# ===========================
-# reduce sample size
-for i in 1:84-27
-    a, b = i, 27+i
-    tmc = tropical_median_consensus(s[a:b])
-
-    V = transpose(stack(vech.(s[a:b])))
-    m, n = size(V)
-    M = zeros(m*n+2, m+n)
-    for i in 1:m, j in 1:n
-        M[(i-1) * n + j, i] = 1.0
-        M[(i-1) * n + j, m + j] = 1.0
-    end
-    M[end-1, m+1:end] .=  1
-    M[end  , m+1:end] .= -1
-    v = [reshape(transpose(V), m*n); 0; 0]
-    E = polyhedron(-M, -v)
-    l = vcat(n*ones(m), zeros(n))
-    LP = linear_program(E, l; convention=:min)
-    r, tx = solve_lp(LP)
-    t = tx[1:m]
-    x = tx[m+1:end]
-    tree = phylogenetic_tree(vech_to_matrix(x), taxa(s[1]))
-
-
-    if sum(d.(s[a:b], Ref(tmc))) - sum(d.(s[a:b], Ref(tree))) > 1
-        println(i)
-    end
-end
-
-# reconstruct polymake side for a,b = 1,28
-# Note that if we compare the resulting cophenetic matrices
-cophenetic_matrix(tree)
-cophenetic_matrix(tmc)
-# particularly the entries [6,8] and [7,8] in the c. matrix of tmc are significantly bigger than those of tree (even after subtracting the constant factor that Andrei adds)
-S = zeros(28,28) # essentially V
-for k in 1:8
-    for (i,j) in combinations(1:8,2)
-            S[k,8*(i-1) - Int(i*(i+1)//2)+ j] = cophenetic_matrix(s[k])[i,j]
-    end
-end
-# As expected, when comparing the result of the tropical_median function with x above the last two entries diverge significantly after making up for the
-tm = Vector(Polymake.call_function(:tropical,:tropical_median, S))
-filter(i -> abs(tm[i] - x[i]) > 1, 1:28)
-
-# debugging tropical_median
-# 1. computing tropical vertices
-m, n = 28, 28
-supply = n*ones(m); demand = m*ones(n)
-flowMatrix = Polymake.call_function(:graph,:optimal_transport_plan, -S, supply, demand)
-trop_vert = Polymake.call_function(:tropical, :facets_matrix, S, flowMatrix)
-# 2. computing the average of the tropical vertices
-tm = zeros(n)
-r, c = size(trop_vert)
-for i in 1:c
-    tm[i] = 1/r*(sum(trop_vert[:,i]))
-end
-# The result is similar to the result of the tropical_median function in polymake (up to adding some multiple of the all ones vector)
-# The problem must be in the computation of the tropical vertices then
