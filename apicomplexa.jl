@@ -41,26 +41,24 @@ function make_equidistant(tree::PhylogeneticTree{T}) where T
     return new_tree
 end
 
-normalize_cophenetric_matrix(m) = vech_to_matrix(vech(m) .- mean(vech(m)))
+""" Shift a cophenetic matrix onto the hyperplane H = {x | ∑ᵢxᵢ=0}. """
+normalize_cophenetic_matrix(m) = vech_to_matrix(vech(m) .- mean(vech(m)))
 
 # Apicomplexa data set
 samples = (open("../R-Data/apicomplexa.txt")
      |> readlines
+     |> Base.Fix2(getindex, load("../R-Data/apicomplexa_path_subset.txt")) # Subset that causes the problem to appear
     .|> (s -> phylogenetic_tree(Float64, s))
     .|> make_equidistant
 )
 
-# Consensus tree bug
-pathological_indices = load("../R-Data/apicomplexa_path_subset.txt")
-samples = samples[pathological_indices]
-
 # reduce sample size for testing
-samples = samples[1:50]
+samples = samples[1:25]
 
 # Tropical median consensus tree via Andrei's implementation
-@time mt1 = tropical_median_consensus(samples)
+@timed mt1 = tropical_median_consensus(samples)
 @assert is_equidistant(mt1)
-display(normalize_cophenetric_matrix(cophenetic_matrix(mt1)))
+normalize_cophenetic_matrix(cophenetic_matrix(mt1))
 Float64(sum(d.(samples, Ref(mt1))))
 
 # Alternative implementations of tropical median consensus tree, using `troipical_median` directly
@@ -76,7 +74,7 @@ end
 
 @time mt2 = tropical_median_consensus2(samples)
 @assert is_equidistant(mt2)
-display(normalize_cophenetic_matrix(cophenetic_matrix(mt2)))
+vech(normalize_cophenetic_matrix(cophenetic_matrix(mt2)))
 Float64(sum(d.(samples, Ref(mt2))))
 
 # Alternative implementation of tropical median consensus tree, via linear programming
@@ -99,15 +97,15 @@ function tropical_median_consensus3(trees::AbstractVector{PhylogeneticTree{T}}) 
     @assert is_feasible(E)
     LP = linear_program(E, l; convention=:min)
     _, tx = solve_lp(LP)
-    t = tx[1:m]
+    _ = tx[1:m]
     x = tx[m+1:end]
     tree = phylogenetic_tree(vech_to_matrix(x), t)
     return tree
 end
 
-@time t3 = tropical_median_consensus3(samples)
-display(normalize_cophenetric_matrix(cophenetic_matrix(t3)))
-sum(d.(samples, Ref(t3)))
+@timed mt3 = tropical_median_consensus3(samples)
+display(normalize_cophenetic_matrix(cophenetic_matrix(mt3)))
+sum(d.(samples, Ref(mt3)))
 
 
 
