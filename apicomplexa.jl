@@ -2,7 +2,7 @@ include("clustering.jl")
 # %% Apicomplexa
 leaq(a,b; kwargs...) = (a <= b) || isapprox(a, b; kwargs...)
 
-is_ultrametric(m::Matrix{Float64}) = is_symmetric(m) && iszero(diag(m)) && all(leaq(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
+is_ultrametric(m::Matrix{Float64}) = all(leaq(m[i,j], max(m[i,k], m[j,k]); atol=1e-10) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
 
 is_ultrametric(m::QQMatrix) = is_symmetric(m) && all(<=(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
 
@@ -45,9 +45,9 @@ end
 normalize_cophenetic_matrix(m) = vech_to_matrix(vech(m) .- mean(vech(m)))
 
 # Apicomplexa data set
-samples = (open("../R-Data/apicomplexa.txt")
+samples = (open("R-Data/apicomplexa.txt")
      |> readlines
-     |> Base.Fix2(getindex, load("../R-Data/apicomplexa_path_subset.txt")) # Subset that causes the problem to appear
+     |> Base.Fix2(getindex, load("R-Data/apicomplexa_path_subset.txt")) # Subset that causes the problem to appear
     .|> (s -> phylogenetic_tree(Float64, s))
     .|> make_equidistant
 )
@@ -58,8 +58,8 @@ samples = samples[1:25]
 # Tropical median consensus tree via Andrei's implementation
 @timed mt1 = tropical_median_consensus(samples)
 @assert is_equidistant(mt1)
-normalize_cophenetic_matrix(cophenetic_matrix(mt1))
-Float64(sum(d.(samples, Ref(mt1))))
+nm1 = normalize_cophenetic_matrix(cophenetic_matrix(mt1))
+d1 = Float64(sum(d.(samples, Ref(mt1))))
 
 # Alternative implementations of tropical median consensus tree, using `troipical_median` directly
 function tropical_median_consensus2(trees::AbstractVector{PhylogeneticTree{T}}) where T
@@ -68,14 +68,15 @@ function tropical_median_consensus2(trees::AbstractVector{PhylogeneticTree{T}}) 
     mat .-= mean(mat, dims=2)
     sol = Polymake.tropical.tropical_median(mat)
     sol .-= minimum(sol)
-    mat = [convert(T, c) for c in sol]
-    phylogenetic_tree(vech_to_matrix(mat), t)
+    mat = vech_to_matrix([convert(T, c) for c in sol])
+    @assert is_ultrametric(mat) "The resulting cophenetic matrix is not ultrametric: $mat"
+    phylogenetic_tree(mat, t)
 end
 
 @time mt2 = tropical_median_consensus2(samples)
 @assert is_equidistant(mt2)
-vech(normalize_cophenetic_matrix(cophenetic_matrix(mt2)))
-Float64(sum(d.(samples, Ref(mt2))))
+nm2 = normalize_cophenetic_matrix(cophenetic_matrix(mt2))
+d2 = Float64(sum(d.(samples, Ref(mt2))))
 
 # Alternative implementation of tropical median consensus tree, via linear programming
 function tropical_median_consensus3(trees::AbstractVector{PhylogeneticTree{T}}) where T
@@ -103,11 +104,16 @@ function tropical_median_consensus3(trees::AbstractVector{PhylogeneticTree{T}}) 
     return tree
 end
 
-@timed mt3 = tropical_median_consensus3(samples)
-display(normalize_cophenetic_matrix(cophenetic_matrix(mt3)))
-sum(d.(samples, Ref(mt3)))
+@time mt3 = tropical_median_consensus3(samples)
+nm3 = normalize_cophenetic_matrix(cophenetic_matrix(mt3))
+d3 = sum(d.(samples, Ref(mt3)))
 
-
+isapprox.(nm1, nm2)
+isapprox.(nm1, nm3)
+isapprox.(nm2, nm3)
+isapprox(d1, d2)
+isapprox(d1, d3)
+isapprox(d2, d3)
 
 # More debugging stuff (Lena)
 # ===========================
