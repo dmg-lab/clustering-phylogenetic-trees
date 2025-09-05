@@ -56,7 +56,7 @@ samples = (open("R-Data/apicomplexa.txt")
 samples = samples[1:25]
 
 # Tropical median consensus tree via Andrei's implementation
-@timed mt1 = tropical_median_consensus(samples)
+@time mt1 = tropical_median_consensus(samples)
 @assert is_equidistant(mt1)
 nm1 = normalize_cophenetic_matrix(cophenetic_matrix(mt1))
 d1 = Float64(sum(d.(samples, Ref(mt1))))
@@ -66,9 +66,9 @@ function tropical_median_consensus2(trees::AbstractVector{PhylogeneticTree{T}}) 
     t = only(unique(taxa.(trees)))
     mat = collect(transpose(stack(vech.(trees))))
     mat .-= mean(mat, dims=2)
-    sol = Polymake.tropical.tropical_median(mat)
+    sol = collect(convert(T, c) for c in Polymake.tropical.tropical_median(mat))::Vector{T}
     sol .-= minimum(sol)
-    mat = vech_to_matrix([convert(T, c) for c in sol])
+    mat = vech_to_matrix(sol)
     @assert is_ultrametric(mat) "The resulting cophenetic matrix is not ultrametric: $mat"
     phylogenetic_tree(mat, t)
 end
