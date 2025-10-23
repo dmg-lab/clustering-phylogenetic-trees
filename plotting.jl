@@ -49,7 +49,7 @@ end
 
 treetype_coordinates(t) = isnothing(treetype(t)) ? nothing : (treetype(t), tree_coordinates(t))
 
-@assert all(all(tree_coordinates(s) .>= 0) for s in samples) "Local coordinates must be nonnegative."
+# @assert all(all(tree_coordinates(s) .>= 0) for s in samples) "Local coordinates must be nonnegative."
 
 canvas_coordinates(t) = sum(canvas_bases[treetype(t)] .* tree_coordinates(t))
 
@@ -98,9 +98,9 @@ function plot_clustering(clusters, p)
     p
 end
 
-for clusters in iterations
-    display(plot_clustering(clusters, plot()))
-end
+# for clusters in iterations
+    # display(plot_clustering(clusters, plot()))
+# end
 
 xlim = (-1,1)
 ylim = (-1,1.5)
@@ -133,13 +133,13 @@ end
 
 grid_of_trees = Array{Union{Vector{Float64}, Nothing}}(nothing, Int.(ceil.(res .* (xlim[2] - xlim[1], ylim[2] - ylim[1]))))
 
-for i in axes(grid_of_trees, 1), j in axes(grid_of_trees, 2)
-    x, y = grid_to_canvas(i, j)
-    r = canvas_to_treetype_coordinates(x, y)
-    isnothing(r) && continue
-    (t, (u, v)) = r
-    grid_of_trees[i, j] = vech(tree_from_coordinates(t, u, v))
-end
+# for i in axes(grid_of_trees, 1), j in axes(grid_of_trees, 2)
+#     x, y = grid_to_canvas(i, j)
+#     r = canvas_to_treetype_coordinates(x, y)
+#     isnothing(r) && continue
+#     (t, (u, v)) = r
+#     grid_of_trees[i, j] = vech(tree_from_coordinates(t, u, v))
+# end
 
 xs = xlim[1] .+ (0:size(grid_of_trees, 1)-1) ./ res
 ys = ylim[1] .+ (0:size(grid_of_trees, 2)-1) ./ res

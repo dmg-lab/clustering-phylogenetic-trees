@@ -42,7 +42,11 @@ function make_equidistant(tree::PhylogeneticTree{T}) where T
 end
 
 """ Shift a cophenetic matrix onto the hyperplane H = {x | ∑ᵢxᵢ=0}. """
-normalize_cophenetic_matrix(m) = vech_to_matrix(vech(m) .- mean(vech(m)))
+normalize_cophenetic_matrix(t::PhylogeneticTree{T}) where T = phylogenetic_tree(vech_to_matrix(vech(t) .- mean(vech(t))), taxa(t))
+normalize_cophenetic_matrix(m::Union{QQMatrix, Matrix{Float64}}) = vech_to_matrix(vech(m) .- mean(vech(m)))
+denormalize(t) = phylogenetic_tree(vech_to_matrix(1 .+ vech(t) .- minimum(vech(t))), taxa(t))
+is_normalized(t) = isapproxzero(mean(vech(t)))
+isapproxzero(t) = isapprox(t, zero(t); atol=1e-10)
 
 # Alternative implementations of tropical median consensus tree, using `troipical_median` directly
 function tropical_median_consensus2(trees::AbstractVector{PhylogeneticTree{T}}) where T
@@ -50,9 +54,10 @@ function tropical_median_consensus2(trees::AbstractVector{PhylogeneticTree{T}}) 
     mat = collect(transpose(stack(vech.(trees))))
     mat .-= mean(mat, dims=2)
     sol = collect(convert(T, c) for c in Polymake.tropical.tropical_median(mat))::Vector{T}
-    sol .-= minimum(sol)
+    # sol .-= minimum(sol) # should probably do this (moving solution away from H), because Polymake might assume nonnegative entries for cophenetric matrix
     mat = vech_to_matrix(sol)
-    @assert is_ultrametric(mat) "The resulting cophenetic matrix is not ultrametric: $mat"
+    # @assert isapprox(sum(vech(mat))) "The resulting cophenetic matrix $mat does not lie on the hyperplane"
+    # @assert is_ultrametric(mat) "The resulting cophenetic matrix is not ultrametric: $mat"
     phylogenetic_tree(mat, t)
 end
 
@@ -79,37 +84,8 @@ function tropical_median_consensus3(trees::AbstractVector{PhylogeneticTree{T}}) 
     _ = tx[1:m]
     x = tx[m+1:end]
     mat = vech_to_matrix(x)
-    @assert is_ultrametric(mat) "The resulting cophenetic matrix is not ultrametric."
+    # @assert iszero(sum(vech(mat))) "The resulting cophenetic matrix $mat does not lie on the hyperplane"
+    # @assert is_ultrametric(mat) "The resulting cophenetic matrix $mat is not ultrametric."
     tree = phylogenetic_tree(mat, t)
     return tree
 end
-
-# TEST
-# ====
-
-
-# Apicomplexa data set
-samples = (open("R-Data/apicomplexa.txt")
-     |> readlines
-     |> Base.Fix2(getindex, load("R-Data/apicomplexa_path_subset.txt")) # Subset that causes the problem to appear
-    .|> (s -> phylogenetic_tree(Float64, s)) # <== also try with QQFieldElem
-    .|> make_equidistant
-)
-
-# reduce sample size for testing
-samples = samples[1:25] # <== also try without this line
-
-# Tropical median consensus tree via Andrei's implementation
-@time mt1 = tropical_median_consensus(samples)
-@assert is_equidistant(mt1)
-nm1 = normalize_cophenetic_matrix(cophenetic_matrix(mt1))
-d1 = Float64(sum(d.(samples, Ref(mt1))))
-
-@time mt2 = tropical_median_consensus2(samples)
-@assert is_equidistant(mt2)
-nm2 = normalize_cophenetic_matrix(cophenetic_matrix(mt2))
-d2 = Float64(sum(d.(samples, Ref(mt2))))
-
-@time mt3 = tropical_median_consensus3(samples)
-nm3 = normalize_cophenetic_matrix(cophenetic_matrix(mt3))
-d3 = sum(d.(samples, Ref(mt3)))

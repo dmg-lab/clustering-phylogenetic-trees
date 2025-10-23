@@ -101,7 +101,7 @@ end
 """ k-means-clustering w.r.t. the distance function `d`.
     Either provide `centroids` as a vector of trees, a vector of indices into `samples`, or an integer.
     In the latter case, the function samples `centrs` many centroids at random."""
-function cluster(samples, centrs::Union{Int, Vector{Int}, Vector{PhylogeneticTree}}; d=d)
+function cluster(samples, centrs::Union{Int, Vector{Int}, Vector{PhylogeneticTree}}; d=d, median_func=tropical_median_consensus)
     centroids = centrs isa Int ? farthest_point_sampling_rand(samples, centrs; d=d) : centrs isa Vector{Int} ? samples[centrs] : centrs
     labels = fill(-1, length(samples))
     clusters = [Int[] for _ in centroids]
@@ -123,7 +123,7 @@ function cluster(samples, centrs::Union{Int, Vector{Int}, Vector{PhylogeneticTre
         end
         println([sum(d(samples[i], centroid) for i in cluster) for (cluster, centroid) in zip(clusters, centroids)])
         centroids = [
-            length(cluster) == 0 ? centroid : tropical_median_consensus(samples[cluster])
+            length(cluster) == 0 ? centroid : median_func(samples[cluster])
             for (cluster, centroid) in zip(clusters, centroids)
         ]
         println([sum(d(samples[i], centroid) for i in cluster) for (cluster, centroid) in zip(clusters, centroids)])
