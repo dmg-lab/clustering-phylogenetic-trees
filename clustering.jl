@@ -22,17 +22,24 @@ function vech(A::AbstractMatrix{T}) where T
     return v
 end
 
+vech(A::QQMatrix) = vech(collect(A))
+
 """ Convert a vector to a symmetric matrix, in row-major order, with diagonals set to zero."""
-function vech_to_matrix(v::AbstractVector{T}) where T
+vech_to_matrix(v::AbstractVector) = vech_to_matrix_internal(v)
+
+vech_to_matrix(v::AbstractVector{QQFieldElem}) = matrix(vech_to_matrix_internal(v))
+
+function vech_to_matrix_internal(v::AbstractVector{T}) where T
     n = Int((sqrt(1 + 8*length(v)) + 1) ÷ 2)
     @assert n * (n - 1) ÷ 2 == length(v) "Vector length must be n(n-1)/2 for some n."
-    A = zeros(T, (n, n))
+    A = zeros(T, n, n)
     k = 0
     for i in 1:n, j in i+1:n
         @inbounds A[j, i] = A[i, j] = v[k += 1]
     end
     return A
 end
+
 
 """ Convert a PhylogeneticTree to a vector in ℝᵉ/𝟏ℝ, where e = choose(#leaves, 2)."""
 vech(t::PhylogeneticTree) = vech(cophenetic_matrix(t))
@@ -94,7 +101,7 @@ end
 """ k-means-clustering w.r.t. the distance function `d`.
     Either provide `centroids` as a vector of trees, a vector of indices into `samples`, or an integer.
     In the latter case, the function samples `centrs` many centroids at random."""
-function cluster(samples, centrs::Union{Int, Vector{Int}, Vector{PhylogeneticTree}}; d=d)
+function cluster(samples, centrs::Union{Int, Vector{Int}, Vector{PhylogeneticTree}}; d=d, median_func=tropical_median_consensus)
     centroids = centrs isa Int ? farthest_point_sampling_rand(samples, centrs; d=d) : centrs isa Vector{Int} ? samples[centrs] : centrs
     labels = fill(-1, length(samples))
     clusters = [Int[] for _ in centroids]
@@ -116,7 +123,7 @@ function cluster(samples, centrs::Union{Int, Vector{Int}, Vector{PhylogeneticTre
         end
         println([sum(d(samples[i], centroid) for i in cluster) for (cluster, centroid) in zip(clusters, centroids)])
         centroids = [
-            length(cluster) == 0 ? centroid : tropical_median_consensus(samples[cluster])
+            length(cluster) == 0 ? centroid : median_func(samples[cluster])
             for (cluster, centroid) in zip(clusters, centroids)
         ]
         println([sum(d(samples[i], centroid) for i in cluster) for (cluster, centroid) in zip(clusters, centroids)])
