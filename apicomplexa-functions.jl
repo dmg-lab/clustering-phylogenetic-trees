@@ -21,7 +21,7 @@ function make_equidistant(tree::PhylogeneticTree{T}) where T
     function f(v, h)
         for w in outneighbors(graph, v)
             h′ = h + edge_lengths[Edge(v, w)]
-            if outdegree(graph, w) == 0
+            if Oscar.outdegree(graph, w) == 0
                 j = leaf_indices[w]
                 l = convert(T, height - h′)
                 for i in 1:size(m, 1)

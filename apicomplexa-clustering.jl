@@ -1,7 +1,7 @@
 include("apicomplexa-functions.jl")
 using Phylo
 
-samples = (open("R-Data/apicomplexa.txt")
+samples = (open("../data/R-data/apicomplexa.txt")
      |> readlines
     #  |> Base.Fix2(getindex, load("R-Data/apicomplexa_path_subset.txt")) # Subset that causes the problem to appear
     .|> (s -> phylogenetic_tree(Float64, s)) # <== also with Float64 and QQFieldElem
@@ -29,7 +29,7 @@ function repeat_until_success(f, args...; kwargs...)
     end
 end
 
-k = 10
+k = 6
 p = repeat_until_success(cluster, samples, k; median_func=tropical_median_consensus2)
 Plots.plot([Plots.plot(parsenewick("($(newick(denormalize(q))[1:end-1]));")) for q in p[end][1]]...)
 length.(filter(i -> i == j,p[end][2]) for j in 1:k)
