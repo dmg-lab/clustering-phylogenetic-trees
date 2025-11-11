@@ -3,16 +3,54 @@ using Oscar, Combinatorics
 include("clustering.jl")
 
 # %% Consensus tree bug
-;f(m, t) = phylogenetic_tree(m, t)
-t, s = load("consensus_tree_bug.json")
+f(m, t) = phylogenetic_tree(m, t)
+t, s = load("data/consensus_tree_bug.json")
 t, s = f(t...), [f(a, b) for (a, b) in s]
 @assert length(unique(taxa.(s))) == 1 "All trees must have the same taxa."
-tmc = tropical_median_consensus(s)
+tmc = tropical_median_consensus(s[1:27])
+# ======================== Check dissimilarity of cophenetic matrix =========================
+n_trees = length(s[1:28])
+n_taxa = 8
+S = zeros(n_trees, Int(8*7/2))
+
+for k in 1:n_trees
+    for i in 1:n_taxa
+        for j in i+1:n_taxa
+            S[k, (i-1)*n_taxa - Int((i+1)*i/2) + j] = cophenetic_matrix(s[k])[i,j]
+        end
+    end
+end
+max_entry = maximum(S)
+sol = Vector(Polymake.tropical.tropical_median(S))
+aux = max_entry - maximum(sol)
+sol_mat = zeros(n_taxa, n_taxa)
+
+for i in 1:n_taxa
+    for j in i+1:n_taxa
+        sol_mat[i,j] = sol[(i-1)*n_taxa - Int(i*(i+1)/2) + j] + aux
+        sol_mat[j,i] = sol_mat[i,j]
+    end
+end
+
+for i in 1:n_taxa
+    for j in i+1:n_taxa
+        for k in j+1:n_taxa
+            dij = sol_mat[i,j]; djk = sol_mat[j,k]; dki = sol_mat[k,i]
+            min = minimum([dij,djk,dki])
+            max = maximum([dij,djk,dki])
+            middl = dij + djk + dki - min - max
+            println(i, j, k, " ", max - middl)
+        end
+    end 
+end
+# ==============================================================================================
+
 sum(d.(s, Ref(t)))
 sum(d.(s, Ref(tmc)))
 
 # Build and solve the corresponding LP directly, without using `tropical_median_consensus`.
-V = transpose(stack(vech.(s[1:28])))
+a = 1; b = a + 27
+V = transpose(stack(vech.(s[a:b])))
 m, n = size(V)
 hDiff = sum.([V[i,:]/n for i in 1:m])
 for i in 1:m
@@ -37,7 +75,7 @@ t = tx[1:m]
 sum(t)
 x = tx[m+1:end]
 tree = phylogenetic_tree(vech_to_matrix(x), taxa(s[1]))
-sum(d.(s[1:28], Ref(tree)))
+sum(d.(s[a:b], Ref(tree)))
 
 # reduce sample size
 # Note that samples of cardinality divisible by 28 mostly fail. This does not seem to happen for subsets of different sizes.
