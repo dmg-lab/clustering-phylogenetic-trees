@@ -2,7 +2,7 @@ include("clustering.jl")
 include("plotting.jl")
 
 # %% Read and cluster some phylogenetic trees
-samples = read_newick_json("R-Data/newick-100-4.json", true)
+samples = read_newick_json("data/R-data/newick-100-4.json", true)
 iterations = cluster(samples, 5);
 
 # %% Plot the clustering iterations

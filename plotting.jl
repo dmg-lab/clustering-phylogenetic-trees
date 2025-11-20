@@ -133,13 +133,13 @@ end
 
 grid_of_trees = Array{Union{Vector{Float64}, Nothing}}(nothing, Int.(ceil.(res .* (xlim[2] - xlim[1], ylim[2] - ylim[1]))))
 
-# for i in axes(grid_of_trees, 1), j in axes(grid_of_trees, 2)
-#     x, y = grid_to_canvas(i, j)
-#     r = canvas_to_treetype_coordinates(x, y)
-#     isnothing(r) && continue
-#     (t, (u, v)) = r
-#     grid_of_trees[i, j] = vech(tree_from_coordinates(t, u, v))
-# end
+for i in axes(grid_of_trees, 1), j in axes(grid_of_trees, 2)
+    x, y = grid_to_canvas(i, j)
+    r = canvas_to_treetype_coordinates(x, y)
+    isnothing(r) && continue
+    (t, (u, v)) = r
+    grid_of_trees[i, j] = vech(tree_from_coordinates(t, u, v))
+end
 
 xs = xlim[1] .+ (0:size(grid_of_trees, 1)-1) ./ res
 ys = ylim[1] .+ (0:size(grid_of_trees, 2)-1) ./ res
@@ -161,3 +161,34 @@ function plot_clusters(clusters)
     p
 end
 
+function explain_visualization(from=(1,0,0))
+    grid = [
+        exp(1//4*π*im),
+        exp(3//4*π*im),
+        exp(9//8*π*im),
+        exp(6//4*π*im),
+        exp(15//8*π*im),
+    ]
+    O = vech(tree_from_coordinates(from...))
+    p = plot(aspect_ratio=:equal, size=(800,800), showaxis=false, legend=false, xlims=(-1.0,1.0), ylims=(-1.0,1.5))
+    for (i, g) in enumerate(grid)
+        plot!(p, [0, real(g)], [0, imag.(g)], color=:black, label="", aspect_ratio=:equal, size=(800,800))
+        # annotate!(p, 1.1*real(g), 1.1 * imag(g), "$i")
+    end
+    g = [exp(1//4*π*im), exp(1//4*π*im) + exp(3//4*π*im), exp(3//4*π*im), exp(9//8*π*im), exp(6//4*π*im), exp(15//8*π*im), exp(1//4*π*im)]
+    plot!(p, real.(g), imag.(g), color=:black)
+    hm1 = [
+        isnothing(s) ? 0 : d(O, s)
+        for s in grid_of_trees
+    ]
+    hm2 = [
+        isnothing(s) ? 0 : d(s, O)
+        for s in grid_of_trees
+    ]
+    lvls = Int(ceil(max(maximum(hm1), maximum(hm2))))
+    contour!(p, xs, ys, transpose(hm1), aspect_ratio=:equal, levels=lvls, clims=(0,lvls+1), color=:black)
+    contour!(p, xs, ys, transpose(hm2), aspect_ratio=:equal, levels=lvls, clims=(0,lvls+1), color=:red, colorbar=false)
+    return p
+end
+# explain_visualization((1,.0, .0))
+# savefig(explain_visualization(), "visualization_explanation.pdf")
