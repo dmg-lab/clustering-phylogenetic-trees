@@ -7,17 +7,16 @@ f(m, t) = phylogenetic_tree(m, t)
 t, s = load("data/consensus_tree_bug.json")
 t, s = f(t...), [f(a, b) for (a, b) in s]
 @assert length(unique(taxa.(s))) == 1 "All trees must have the same taxa."
-tmc = tropical_median_consensus(s[1:27])
+tmc = tropical_median_consensus(s)
+
 # ======================== Check dissimilarity of cophenetic matrix =========================
-n_trees = length(s[1:28])
+n_trees = length(s[1:84])
 n_taxa = 8
-S = zeros(n_trees, Int(8*7/2))
+S = zeros(n_trees, Int(n_taxa*(n_taxa-1)/2))
 
 for k in 1:n_trees
-    for i in 1:n_taxa
-        for j in i+1:n_taxa
-            S[k, (i-1)*n_taxa - Int((i+1)*i/2) + j] = cophenetic_matrix(s[k])[i,j]
-        end
+    for (i,j) in Combinatorics.combinations(1:n_taxa,2)
+        S[k, (i-1)*n_taxa - Int((i+1)*i/2) + j] = cophenetic_matrix(s[k])[i,j]
     end
 end
 max_entry = maximum(S)
@@ -49,7 +48,7 @@ sum(d.(s, Ref(t)))
 sum(d.(s, Ref(tmc)))
 
 # Build and solve the corresponding LP directly, without using `tropical_median_consensus`.
-a = 1; b = a + 27
+a = 1; b = length(s)
 V = transpose(stack(vech.(s[a:b])))
 m, n = size(V)
 hDiff = sum.([V[i,:]/n for i in 1:m])
