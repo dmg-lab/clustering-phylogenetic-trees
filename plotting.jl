@@ -1,4 +1,6 @@
 include("clustering.jl")
+const col0 = palette([:black])
+const col1 = palette([colorant"#ffffffff", palette(:tab10)...])
 # Tools for plotting binary trees on four leaves
 # ==============================================
 """ Returns an integer that describes the topology of the tree, according to the following table:
@@ -93,8 +95,8 @@ function plot_clustering(clusters, p)
     c = canvas_coordinates.(centroids[mc])
     l = labels[ms]
 
-    scatter!(p, real.(s), imag.(s), color=1 .+ l       , palette=col, marker=:circle, markersize=4, group=l)
-    scatter!(p, real.(c), imag.(c), color=2:1+length(c), palette=col, marker=:star,   markersize=8, label="")
+    scatter!(p, real.(s), imag.(s), color=0 .+ l     , palette=col, marker=:circle, markersize=4, group=l)
+    scatter!(p, real.(c), imag.(c), color=1:length(c), palette=col, marker=:star,   markersize=8, label="")
     p
 end
 
@@ -151,7 +153,7 @@ function plot_clusters(clusters)
         isnothing(s) ? 0 : argmin(d(s, c) for c in centroids) 
         for s in grid_of_trees
     ]
-    p = heatmap(xs, ys, transpose(hm), aspect_ratio=:equal, color=col, cmin=-.5, clim=(-.5, 9.5), alpha=.2, size=(600, 600), colorbar=false)
+    p = heatmap(xs, ys, transpose(hm), aspect_ratio=:equal, color=col1, cmin=-.5, clim=(-.5, 9.5), alpha=.2, size=(400, 600), colorbar=false, ticks=false)
     hm = [
         isnothing(s) ? 0 : minimum(d(s, c) for c in centroids)
         for s in grid_of_trees

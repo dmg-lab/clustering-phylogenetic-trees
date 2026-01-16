@@ -1,7 +1,5 @@
 using Oscar, LinearAlgebra, Plots, JSON, OrderedCollections, Random, StatsBase, Printf, Combinatorics
 import Oscar: PhylogeneticTree
-const col = palette(:tab10)
-const col0 = palette([:black])
 
 """ Like `first`, but returns `default` if the iterator is empty."""
 function firstd(iter, default=nothing)

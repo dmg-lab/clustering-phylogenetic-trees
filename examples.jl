@@ -7,6 +7,10 @@ iterations = cluster(samples, 5);
 
 # %% Plot the clustering iterations
 display.(plot_clusters.(iterations))
+for (i,f) in enumerate(iterations)
+    p = plot_clusters(f)
+    savefig(p, "clustering_iteration_$(i).pdf")
+end
 
 # Generate uniformly distributed random trees on four leaves and cluster
 samples = [
