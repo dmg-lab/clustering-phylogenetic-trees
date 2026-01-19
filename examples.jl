@@ -1,5 +1,6 @@
 include("clustering.jl")
 include("plotting.jl")
+using Plots.PlotMeasures
 
 # %% Read and cluster some phylogenetic trees
 samples = read_newick_json("data/R-data/newick-100-4.json", true)
@@ -9,6 +10,8 @@ iterations = cluster(samples, 5);
 display.(plot_clusters.(iterations))
 for (i,f) in enumerate(iterations)
     p = plot_clusters(f)
+    plot!(p, legend=false, size=(250,300), axis=false, bottom_margin=-10mm, top_margin=-10mm, left_margin=-10mm, right_margin=-10mm)
+    display(p)
     savefig(p, "clustering_iteration_$(i).pdf")
 end
 
