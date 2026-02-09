@@ -133,14 +133,17 @@ function canvas_to_treetype_coordinates(x, y)
     return nothing
 end
 
-grid_of_trees = Array{Union{Vector{Float64}, Nothing}}(nothing, Int.(ceil.(res .* (xlim[2] - xlim[1], ylim[2] - ylim[1]))))
-
-for i in axes(grid_of_trees, 1), j in axes(grid_of_trees, 2)
-    x, y = grid_to_canvas(i, j)
-    r = canvas_to_treetype_coordinates(x, y)
-    isnothing(r) && continue
-    (t, (u, v)) = r
-    grid_of_trees[i, j] = vech(tree_from_coordinates(t, u, v))
+if isdefinedglobal(Main, :grid_of_trees)
+    global grid_of_trees = begin
+        grid_of_trees = Array{Union{Vector{Float64}, Nothing}}(nothing, Int.(ceil.(res .* (xlim[2] - xlim[1], ylim[2] - ylim[1]))))
+        for i in axes(grid_of_trees, 1), j in axes(grid_of_trees, 2)
+            x, y = grid_to_canvas(i, j)
+            r = canvas_to_treetype_coordinates(x, y)
+            isnothing(r) && continue
+            (t, (u, v)) = r
+            grid_of_trees[i, j] = vech(tree_from_coordinates(t, u, v))
+        end
+    end
 end
 
 xs = xlim[1] .+ (0:size(grid_of_trees, 1)-1) ./ res
