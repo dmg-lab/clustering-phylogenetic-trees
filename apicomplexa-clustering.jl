@@ -1,12 +1,12 @@
 include("apicomplexa-functions.jl")
 using Phylo
 
-samples = (open("../data/R-data/apicomplexa.txt")
+samples = (open("data/R-data/apicomplexa.txt")
      |> readlines
     #  |> Base.Fix2(getindex, load("R-Data/apicomplexa_path_subset.txt")) # Subset that causes the problem to appear
     .|> (s -> phylogenetic_tree(Float64, s)) # <== also with Float64 and QQFieldElem
     .|> make_equidistant
-    .|> normalize_cophenetic_matrix
+    # .|> normalize_cophenetic_matrix
 )
 
 function tmc(samples)
@@ -30,6 +30,12 @@ function repeat_until_success(f, args...; kwargs...)
 end
 
 k = 6
+Random.seed!(2)
+try
+    p = cluster(samples, k; median_func=tropical_median_consensus2)
+catch e
+    global mat = e
+end
 p = repeat_until_success(cluster, samples, k; median_func=tropical_median_consensus2)
 Plots.plot([Plots.plot(parsenewick("($(newick(denormalize(q))[1:end-1]));")) for q in p[end][1]]...)
 length.(filter(i -> i == j,p[end][2]) for j in 1:k)

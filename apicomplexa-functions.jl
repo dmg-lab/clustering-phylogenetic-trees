@@ -2,9 +2,26 @@ include("clustering.jl")
 # %% Apicomplexa
 leaq(a,b; kwargs...) = (a <= b) || isapprox(a, b; kwargs...)
 
-is_ultrametric(m::Matrix{Float64}) = all(leaq(m[i,j], max(m[i,k], m[j,k]); atol=1e-10) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
+function max_attained_at_least_twice(a,b,c)
+    ma = maximum((a,b,c))
+    mi = minimum((a,b,c))
+    mid = a + b + c - ma - mi
+    isapprox(ma, mid)
+end
 
-is_ultrametric(m::QQMatrix) = is_symmetric(m) && all(<=(m[i,j], max(m[i,k], m[j,k])) for i in 1:size(m,1), j in 1:size(m,1), k in 1:size(m,1))
+function is_ultrametric(m)
+    n = size(m, 1)
+    if !is_symmetric(m)
+        return false
+    end 
+    for i in 1:n, j in i+1:n, k in j+1:n
+        if !max_attained_at_least_twice(m[i,j], m[i,k], m[j,k])
+            # println("Not ultrametric: d($i, $j) = $(m[i,j]), d($i, $k) = $(m[i,k]), d($j, $k) = $(m[j,k])")
+            return false
+        end
+    end
+    return true
+end
 
 """ Make a phylogenetic tree equidistant by adding sufficient lengths to the edges
     adjacent to the leaves. All lengths of interiour edges remain the same. """
@@ -49,16 +66,23 @@ is_normalized(t) = isapproxzero(mean(vech(t)))
 isapproxzero(t) = isapprox(t, zero(t); atol=1e-10)
 
 # Alternative implementations of tropical median consensus tree, using `troipical_median` directly
+include("make_tree_like_again.jl")
 function tropical_median_consensus2(trees::AbstractVector{PhylogeneticTree{T}}) where T
+    @assert all(is_equidistant.(trees)) "All input trees must be equidistant."
     t = only(unique(taxa.(trees)))
     mat = collect(transpose(stack(vech.(trees))))
-    mat .-= mean(mat, dims=2)
+    # mat .-= mean(mat, dims=2)
     sol = collect(convert(T, c) for c in Polymake.tropical.tropical_median(mat))::Vector{T}
     # sol .-= minimum(sol) # should probably do this (moving solution away from H), because Polymake might assume nonnegative entries for cophenetric matrix
-    mat = vech_to_matrix(sol)
+    mat_sol = vech_to_matrix(sol)
     # @assert isapprox(sum(vech(mat))) "The resulting cophenetic matrix $mat does not lie on the hyperplane"
+    if !is_ultrametric(mat_sol)
+        println("ℹ️ The resulting cophenetic matrix $(vech(mat_sol)) is not ultrametric; try to make it tree-like again.")
+        throw(mat)
+        mat_sol = make_tree_like_again(mat_sol)
+    end
     # @assert is_ultrametric(mat) "The resulting cophenetic matrix is not ultrametric: $mat"
-    phylogenetic_tree(mat, t)
+    phylogenetic_tree(mat_sol, t)
 end
 
 # Alternative implementation of tropical median consensus tree, via linear programming
