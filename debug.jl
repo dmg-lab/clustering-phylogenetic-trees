@@ -111,15 +111,18 @@ end
 cophenetic_matrix(tree) 
 cophenetic_matrix(tmc)
 # particularly the entries [6,8] and [7,8] in the c. matrix of tmc are significantly bigger than those of tree (even after subtracting the constant factor that Andrei adds)
-
-S = zeros(28,28) # essentially V 
+m = 84
+S = zeros(m,28) # essentially V 
 for k in 1:m
-    for (i,j) in combinations(1:8,2)
+    for i in 1:8
+        for j in i+1:8
             S[k,8*(i-1) - Int(i*(i+1)//2)+ j] = cophenetic_matrix(s[k])[i,j]
+        end
     end
 end
 S
 # Map row vectors of S to hyperplane H 
+n = 28
 hDiff = sum.([S[i,:]/n for i in 1:m])
 for i in 1:m
     for j in 1:n
@@ -134,7 +137,6 @@ filter(i -> abs(tm[i] - x[i]) > 1, 1:28)
 
 # debugging tropical_median
 # 1. computing tropical vertices
-m, n = 28, 28
 supply = n*ones(m); demand = m*ones(n)
 flowMatrix = Polymake.call_function(:graph,:optimal_transport_plan, -S, supply, demand)
 
@@ -155,8 +157,8 @@ end
 
 fw_set = Polymake.call_function(:tropical, :fw_set, S)
 dim(polyhedron(fw_set))
-
-function facets_matrix(costMatrix, flowMatrix)
+costMatrix = copy(S)
+# function facets_matrix(costMatrix, flowMatrix)
     m = nrows(costMatrix)
     n = ncols(costMatrix)
    
@@ -177,10 +179,9 @@ function facets_matrix(costMatrix, flowMatrix)
     nv = n_vertices(g)
     multip = zeros(nv) # dual prices
     labels = (-1)*ones(Int, nv) # represent the connecting components
-
     d = 0
-
     for j in 1:n
+        println(labels)
         if labels[j] == -1
             d += 1
             dfs_initialize_mult(g, j, d, labels, multip, costMatrix, n);
@@ -250,5 +251,6 @@ function dfs_initialize_mult(G, node, lab, labList, mult, edgeCosts, N)
 end
 
 flowMatrix = Polymake.call_function(:graph,:optimal_transport_plan, -S, supply, demand)
-facets = facets_matrix(S, Matrix(flowMatrix))
+fs = facets_matrix(S, Matrix(flowMatrix))
+fs = Polymake.tropical.facets_matrix(S, flowMatrix)
 n_edges(g)
