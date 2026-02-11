@@ -78,10 +78,11 @@ function tropical_median_consensus2(trees::AbstractVector{PhylogeneticTree{T}}) 
     # @assert isapprox(sum(vech(mat))) "The resulting cophenetic matrix $mat does not lie on the hyperplane"
     if !is_ultrametric(mat_sol)
         println("ℹ️ The resulting cophenetic matrix $(vech(mat_sol)) is not ultrametric; try to make it tree-like again.")
-        throw(mat)
         mat_sol = make_tree_like_again(mat_sol)
     end
-    # @assert is_ultrametric(mat) "The resulting cophenetic matrix is not ultrametric: $mat"
+    if !is_ultrametric(mat_sol)
+        throw(mat_sol)
+    end
     phylogenetic_tree(mat_sol, t)
 end
 

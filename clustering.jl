@@ -100,37 +100,33 @@ end
     Either provide `centroids` as a vector of trees, a vector of indices into `samples`, or an integer.
     In the latter case, the function samples `centrs` many centroids at random."""
 function cluster(samples, centrs::Union{Int, Vector{Int}, Vector{PhylogeneticTree}}; d=d, median_func=tropical_median_consensus)
+    # farthest-point sampling of initial centroids
     centroids = centrs isa Int ? farthest_point_sampling_rand(samples, centrs; d=d) : centrs isa Vector{Int} ? samples[centrs] : centrs
-    labels = fill(-1, length(samples))
-    clusters = [Int[] for _ in centroids]
+    
+    labels = fill(-1, length(samples))      # index i of the cluster each sample s belongs to
+    clusters = [Int[] for _ in centroids]   # samples s belonging to cluster i
     iterations = Tuple{Vector{PhylogeneticTree}, Vector{Int64}}[]
-    iteration = 1
-    loss = inf
+    loss = inf                              # loss with current clustering
     while true
-        old_labels = labels
         # Re-assign samples to clusters
+        old_labels = labels
         labels = [argmin(d(s, c) for c in centroids) for s in samples]
         push!(iterations, (centroids, labels))
+        # @assert loss <= (loss = sum(d(s, centroids[labels[i]]) for (i, s) in enumerate(samples))) "Loss did not decrease."
+
+        # break if clustering is stationary
         old_labels == labels && break
-        new_loss = sum(d(s, centroids[labels[i]]) for (i, s) in enumerate(samples))
-        @printf "Iteration: %2d;   ∑ₛd(s,c(s)) = %-10.2f\n" iteration new_loss
+
         # Compute new centroids
         empty!.(clusters)
         for (i, l) in enumerate(labels)
             push!(clusters[l], i)
         end
-        println([sum(d(samples[i], centroid) for i in cluster) for (cluster, centroid) in zip(clusters, centroids)])
         centroids = [
             length(cluster) == 0 ? centroid : median_func(samples[cluster])
             for (cluster, centroid) in zip(clusters, centroids)
         ]
-        println([sum(d(samples[i], centroid) for i in cluster) for (cluster, centroid) in zip(clusters, centroids)])
-        new_loss = sum(d(s, centroids[labels[i]]) for (i, s) in enumerate(samples))
-        @printf "Iteration: %2d.5; ∑ₛd(s,c(s)) = %-10.2f\n" iteration new_loss
-        global L = iterations
-        @assert new_loss <= loss "Loss did not decrease."
-        loss = new_loss
-        iteration += 1
+        # @assert loss <= (loss = sum(d(s, centroids[labels[i]]) for (i, s) in enumerate(samples))) "Loss did not decrease."
     end
     iterations
 end
