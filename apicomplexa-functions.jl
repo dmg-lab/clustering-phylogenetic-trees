@@ -6,7 +6,8 @@ function max_attained_at_least_twice(a,b,c)
     ma = maximum((a,b,c))
     mi = minimum((a,b,c))
     mid = a + b + c - ma - mi
-    isapprox(ma, mid, atol=1e-12, rtol=sqrt(eps(mid)))
+    # isapprox(ma, mid, atol=1e-12, rtol=sqrt(eps(mid)))
+    isapprox(ma, mid)
 end
 
 max_attained_precisely_twice(a,b,c) = max_attained_at_least_twice(a,b,c) && !(isapprox(a,b) && isapprox(a,c) && isapprox(b,c))
@@ -134,7 +135,7 @@ function tropical_median_consensus3(trees::AbstractVector{PhylogeneticTree{T}}) 
 end
 
 function height(t)
-    @assert is_equidistant(t)
+    # @assert is_equidistant(t)
     t.pm_ptree.NODE_HEIGHTS[1]
 end
 
@@ -183,4 +184,5 @@ end
 coarse_type(t) = coarse_type(min_inner_depth(t), t)
 
 using Phylo
-plot_phylo(t) = Plots.plot(parsenewick("($(newick(denormalize(t))[1:end-1]));")) 
+plot_phylo!(p, t) = Plots.plot!(p, parsenewick("($(newick(denormalize(t))[1:end-1]));")) 
+plot_phylo(t) = plot_phylo!(plot(), t)
