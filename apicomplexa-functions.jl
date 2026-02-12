@@ -6,8 +6,10 @@ function max_attained_at_least_twice(a,b,c)
     ma = maximum((a,b,c))
     mi = minimum((a,b,c))
     mid = a + b + c - ma - mi
-    isapprox(ma, mid)
+    isapprox(ma, mid, atol=1e-12, rtol=sqrt(eps(mid)))
 end
+
+max_attained_precisely_twice(a,b,c) = max_attained_at_least_twice(a,b,c) && !(isapprox(a,b) && isapprox(a,c) && isapprox(b,c))
 
 function is_ultrametric(m)
     n = size(m, 1)
@@ -22,6 +24,22 @@ function is_ultrametric(m)
     end
     return true
 end
+
+function is_binary_tree(m)
+    n = size(m, 1)
+    if !is_symmetric(m)
+        return false
+    end 
+    for i in 1:n, j in i+1:n, k in j+1:n
+        if !max_attained_precisely_twice(m[i,j], m[i,k], m[j,k])
+            # println("Not ultrametric: d($i, $j) = $(m[i,j]), d($i, $k) = $(m[i,k]), d($j, $k) = $(m[j,k])")
+            return false
+        end
+    end
+    return true
+end
+
+is_binary_tree(t::PhylogeneticTree) = is_binary_tree(cophenetic_matrix(t))
 
 """ Make a phylogenetic tree equidistant by adding sufficient lengths to the edges
     adjacent to the leaves. All lengths of interiour edges remain the same. """
@@ -114,3 +132,55 @@ function tropical_median_consensus3(trees::AbstractVector{PhylogeneticTree{T}}) 
     tree = phylogenetic_tree(mat, t)
     return tree
 end
+
+function height(t)
+    @assert is_equidistant(t)
+    t.pm_ptree.NODE_HEIGHTS[1]
+end
+
+function max_inner_height(t)
+    @assert is_equidistant(t)
+    maximum(t.pm_ptree.NODE_HEIGHTS[i] for i in 2:t.pm_ptree.N_NODES)
+end
+
+min_inner_depth(t) = height(t) - max_inner_height(t)
+
+function min_inner_height(t)
+    @assert is_equidistant(t)
+    minimum(t.pm_ptree.NODE_HEIGHTS[i] for i in 2:t.pm_ptree.N_NODES if t.pm_ptree.NODE_DEGREES[i] != 1)
+end
+
+max_inner_depth(t) = height(t) - min_inner_height(t)
+
+import Base: -, +
+(-)(t::PhylogeneticTree, v) = phylogenetic_tree(vech_to_matrix(vech(t) .- 2*v), taxa(t))
+(+)(t::PhylogeneticTree, v) = phylogenetic_tree(vech_to_matrix(vech(t) .+ 2*v), taxa(t))
+
+function coarse_type(δ, t)
+    n = length(taxa(t))
+    m = cophenetic_matrix(t)
+
+    # all (upper triangle) indices of m, ordered by entry
+    u = [(i,j) for i in 1:n for j in i+1:n if m[i,j]/2 <= height(t) - δ]
+    sort!(u, by=x->m[x[1], x[2]])
+
+    # union-find data structure.
+    repr = collect(1:n)
+    represents = map(i->[i], 1:n)
+
+    # invariant: all nodes with distance < m[i,j] belong to the same cluster.
+    for (i,j) in u
+        # merge the clusters of i and j
+        if repr[i] != repr[j]
+            append!(represents[repr[i]], represents[repr[j]])
+            empty!(represents[repr[j]])
+            repr[j] = repr[i]
+        end
+    end
+    return Set(map(Set, filter(s->!isempty(s), represents)))
+end
+
+coarse_type(t) = coarse_type(min_inner_depth(t), t)
+
+using Phylo
+plot_phylo(t) = Plots.plot(parsenewick("($(newick(denormalize(t))[1:end-1]));")) 

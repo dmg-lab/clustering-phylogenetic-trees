@@ -96,6 +96,8 @@ function farthest_point_sampling_strict(samples, k; d=d)
     return cs
 end
 
+loss(centroids, labels, samples) = sum(d(s, centroids[labels[i]]) for (i, s) in enumerate(samples))
+
 """ k-means-clustering w.r.t. the distance function `d`.
     Either provide `centroids` as a vector of trees, a vector of indices into `samples`, or an integer.
     In the latter case, the function samples `centrs` many centroids at random."""
