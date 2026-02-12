@@ -43,14 +43,33 @@ function repeat_until_success(f, args...; kwargs...)
     end
 end
 
-
-centroids, labels = cluster(samples, 17; median_func=tropical_median_consensus_div)[end]
-
 using ProgressMeter
 ProgressMeter.ncalls(::typeof(argmin), ::Function, arg) = length(arg)
-centroids, labels = @showprogress argmin(((c,l),)->(loss(c,l,samples)), (cluster(samples, 17; median_func=tropical_median_consensus_div)[end] for _ in 1:100))
+ProgressMeter.ncalls(::typeof(findmin), ::Function, arg) = length(arg)
+
+# The following loop will take a while, which is why it is commented out.
+# The seed that minimizes the loss of the clustering 
+# s = @showprogress findmin(1:100) do s
+#     Random.seed!(s)
+#     centroids, labels = cluster(samples, 17; median_func=tropical_median_consensus_div)[end]
+#     loss(centroids, labels, samples)
+# end
+
+Random.seed!(31)
+centroids, labels = cluster(samples, 17; median_func=tropical_median_consensus_div)[end]
+loss(centroids, labels, samples)
 
 Plots.plot(plot_phylo.(centroids)...)
 for (i,q) in enumerate(centroids)
     savefig(plot_phylo(centroids), "$i.pdf")
 end
+
+samples_per_cluster = let
+    r = [Int[] for _ in centroids]
+    for (i, l) in enumerate(labels)
+        push!(r[l], i)
+    end
+    r
+end
+length.(samples_per_cluster)
+
