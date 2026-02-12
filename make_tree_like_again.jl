@@ -39,3 +39,5 @@ function make_tree_like_again(mat)
     @assert is_ultrametric(m) "The resulting matrix is not ultrametric: $m"
     return m
 end
+
+make_tree_like_again(t::PhylogeneticTree) = phylogenetic_tree(make_tree_like_again(cophenetic_matrix(t)), taxa(t))
