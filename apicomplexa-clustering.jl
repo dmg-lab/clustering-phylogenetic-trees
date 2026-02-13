@@ -59,16 +59,18 @@ Random.seed!(31)
 centroids, labels = cluster(samples, 17; median_func=tropical_median_consensus_div)[end]
 loss(centroids, labels, samples)
 
-# Make centroids all same height
+# Make centroids have all positive edge lengths and all of same height
+centroids = denormalize.(centroids)
 centroids = (centroids .+ (maximum(height.(centroids)) .- height.(centroids)))
+loss(centroids, labels, samples)
 
 Plots.plot(plot_phylo.(centroids)...)
 using Plots.PlotMeasures
 for (i,q) in enumerate(centroids)
     p = plot_phylo(q)
-    plot!(p, size=(200, 200), bottom_margin=-6mm, top_margin=-1mm, left_margin=-5mm, right_margin=-16mm)
+    plot!(p, size=(150, 150), bottom_margin=-6mm, top_margin=-1mm, left_margin=-5mm, right_margin=-1mm)
     display(p)
-    # savefig(plot_phylo(q, ), "$i.pdf")
+    savefig(p, "$i.pdf")
 end
 
 samples_per_cluster = let
