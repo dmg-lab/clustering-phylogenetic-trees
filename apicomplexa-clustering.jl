@@ -70,7 +70,7 @@ for (i,q) in enumerate(centroids)
     p = plot_phylo(q)
     plot!(p, size=(150, 150), bottom_margin=-6mm, top_margin=-1mm, left_margin=-5mm, right_margin=-1mm)
     display(p)
-    savefig(p, "$i.pdf")
+    # savefig(p, "$i.pdf")
 end
 
 samples_per_cluster = let
