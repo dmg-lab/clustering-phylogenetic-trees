@@ -1,6 +1,6 @@
 using Combinatorics
 
-include("apicomplexa-functions.jl")
+include("code/apicomplexa-functions.jl")
 
 samples = (open("data/R-data/apicomplexa.txt")
      |> readlines
@@ -172,10 +172,11 @@ for i in 1:17
     end
 end
 
-# counts (Et, Tg) in samples
+# counts (Bb, Ta) (-> 1rst and 6th taxon) in samples
+# counts (Pf, Pv) (-> 4th and 5th taxon) in samples
 count(cophenetic_matrix.(samples)) do M
-    row = M[6,:]
-    isapprox(row[1], minimum(row[[1:5;7:end]])) && !isapprox(row[1], maximum(row))
+    row = M[4,:]
+    isapprox(row[5], minimum(row[[1:3;5:end]])) && !isapprox(row[5], maximum(row))
 end
 
 # counts (Et, Tg) in centroids
