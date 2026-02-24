@@ -159,11 +159,11 @@ ambi_PfPv = [(maximum(cophenetic_matrix(centroids[i])) - cophenetic_matrix(centr
 ambi_BbTa = [(maximum(cophenetic_matrix(centroids[i])) - cophenetic_matrix(centroids[i])[1,6])/2 for i in 1:k]
 ambi_EtTg = [(maximum(cophenetic_matrix(centroids[i])) - cophenetic_matrix(centroids[i])[3,7])/2 for i in 1:k]
 
-histogram(ambi_PfPv, bins=range(0,maximum(ambi_PfPv)+0.1, step=0.001), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14)
-savefig("ambiguity_PfPv.pdf")
-histogram(ambi_BbTa, bins=range(0,maximum(ambi_BbTa)+0.1, step=0.001), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14)
+histogram(ambi_PfPv, bins=range(0,maximum(ambi_PfPv)+0.1, step=0.125), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14, ylims=(0,5))
+savefig("pictures/ambiguity_PfPv.pdf")
+histogram(ambi_BbTa, bins=range(0,maximum(ambi_PfPv)+0.1, step=0.125), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14)
 savefig("ambiguity_BbTa.pdf")
-histogram(ambi_EtTg, bins=range(0,maximum(ambi_EtTg)+0.1, step=0.001), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14)
+histogram(ambi_EtTg, bins=range(0,maximum(ambi_EtTg)+0.1, step=0.125), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14)
 savefig("ambiguity_EtTg.pdf")
 
 for i in 1:17
@@ -188,9 +188,9 @@ for ci in 1:17
     end
 end
 
-histogram([(maximum(M[1,:]) - M[1,6])/2 for M in cophenetic_matrix.(samples)], bins=range(0,10,step=.3), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14)
-savefig("ambiguity_samples_BbTa.pdf")
-histogram([(maximum(M[3,:]) - M[3,7])/2 for M in cophenetic_matrix.(samples)], bins=range(0,10,step=.3), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14)
-savefig("ambiguity_samples_EtTg.pdf")
-histogram([(maximum(M[4,:]) - M[4,5])/2 for M in cophenetic_matrix.(samples)], bins=range(0,10,step=.3), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14)
-savefig("ambiguity_samples_PfPv.pdf")
+histogram([(maximum(M[1,:]) - M[1,6])/2 for M in cophenetic_matrix.(samples)], bins=range(0,8,step=.25), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14, ylims=(0,150))
+savefig("pictures/ambiguity_samples_BbTa.pdf")
+histogram([(maximum(M[3,:]) - M[3,7])/2 for M in cophenetic_matrix.(samples)], bins=range(0,8,step=.25), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14, ylims=(0,150))
+savefig("pictures/ambiguity_samples_EtTg.pdf")
+histogram([(maximum(M[4,:]) - M[4,5])/2 for M in cophenetic_matrix.(samples)], bins=range(0,8,step=.25), legend=false, color=:gray, xtickfontsize = 14,ytickfontsize = 14,  ylims=(0,150))
+savefig("pictures/ambiguity_samples_PfPv.pdf")
