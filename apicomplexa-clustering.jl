@@ -1,6 +1,6 @@
 using Combinatorics
 
-include("code/apicomplexa-functions.jl")
+include("apicomplexa-functions.jl")
 
 samples = (open("data/R-data/apicomplexa.txt")
      |> readlines

@@ -141,14 +141,16 @@ end
 
 function max_inner_height(t)
     @assert is_equidistant(t)
-    maximum(t.pm_ptree.NODE_HEIGHTS[i] for i in 2:t.pm_ptree.N_NODES)
+    nodes = filter(i -> height(t) - t.pm_ptree.NODE_HEIGHTS[i] > 10^-12, 2:t.pm_ptree.N_NODES)
+    maximum(t.pm_ptree.NODE_HEIGHTS[i] for i in nodes)
 end
 
 min_inner_depth(t) = height(t) - max_inner_height(t)
 
 function min_inner_height(t)
     @assert is_equidistant(t)
-    minimum(t.pm_ptree.NODE_HEIGHTS[i] for i in 2:t.pm_ptree.N_NODES if t.pm_ptree.NODE_DEGREES[i] != 1)
+    non_zero_nodes = filter(i -> t.pm_ptree.NODE_DEGREES[i] != 1 && t.pm_ptree.NODE_HEIGHTS[i] > 10^-12, 2:t.pm_ptree.N_NODES)
+    minimum(t.pm_ptree.NODE_HEIGHTS[i] for i in non_zero_nodes)
 end
 
 max_inner_depth(t) = height(t) - min_inner_height(t)
