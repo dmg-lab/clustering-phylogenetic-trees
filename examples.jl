@@ -1,9 +1,8 @@
 include("clustering.jl")
 include("plotting.jl")
-using Plots.PlotMeasures
 
-# %% Read and cluster some phylogenetic trees
-samples = read_newick_json("data/R-data/newick-100-4.json", true)
+# %% Read some phylogenetic trees and cluster into k=5 clusters.
+samples = read_newick_json("example-data/newick-100-4.json", true)
 iterations = cluster(samples, 5);
 
 # %% Plot the clustering iterations
@@ -31,7 +30,10 @@ samples = [
     for _ in 1:100
 ]
 iterations = cluster(samples, 5);
-display.(plot_clusters.(samples, iterations));
+for i in iterations
+    display(plot_clusters(samples, i))
+end
+
 #%% Generate the data uniformly taken from the δ-coarse topologies.
 #    We will find that the clusters usually align with the clusters one "sees".
 Random.seed!(10) # for this seed (and all other parameters unchanged), there will be four iterations until the clustering converges.
@@ -44,7 +46,6 @@ while length(samples) <= 200
         push!(samples, tree_from_coordinates(t, a, b))
     end
 end
-# Plot the data
 display(plot_trees(samples))
 # Cluster, and plot (and save) the clustering
 iterations = cluster(samples, 3)
@@ -54,7 +55,7 @@ for (i,f) in enumerate(iterations)
     # savefig(p, "clustering_iteration_$(i).pdf")
 end
 
-# %% Generate synthetic data clustered around three of the five topologies
+# %% Generate synthetic data clustered by the five topologies
 #    We will find that the clusters usually don't align with the clusters one sees.
 Random.seed!(5)
 δ = 0.2
@@ -66,11 +67,17 @@ while length(samples) <= 200
         push!(samples, tree_from_coordinates(t, a, b))
     end
 end
-iterations = cluster(samples, 3);
 
+iterations = cluster(samples, 3);
 for (i,f) in enumerate(iterations)
     p = plot_clusters(samples, f)
-    # plot!(p, size=(400,600), legend=true)
     display(p)
-    savefig(p, "clustering_iteration_$(i).pdf")
+    # savefig(p, "clustering_iteration_$(i).pdf")
+end
+
+iterations = cluster(samples, 5);
+for (i,f) in enumerate(iterations)
+    p = plot_clusters(samples, f)
+    display(p)
+    # savefig(p, "clustering_iteration_$(i).pdf")
 end

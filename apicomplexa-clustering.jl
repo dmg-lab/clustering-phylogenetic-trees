@@ -1,58 +1,18 @@
-using Combinatorics
-
+using Combinatorics, ProgressMeter
 include("apicomplexa-functions.jl")
 
-samples = (open("data/R-data/apicomplexa.txt")
+# Read data and make all trees equidistant by extending edges to leaves.
+samples = (open("../data/R-data/apicomplexa.txt")
      |> readlines
-    #  |> Base.Fix2(getindex, load("R-Data/apicomplexa_path_subset.txt")) # Subset that causes the problem to appear
     .|> (s -> phylogenetic_tree(Float64, s)) # <== also with Float64 and QQFieldElem
     .|> make_equidistant
-    # .|> normalize_cophenetic_matrix
 )
 
-"""
-    tropical_median_consensus_div(samples)
-
-If `length(samples)` is divisible by the dimension,
-then (for numeric instability reasons), one sample is excluded,
-before `invoking tropical_median_consensus2`.
-"""
-function tropical_median_consensus_div(samples)
-    n = length(taxa(samples[1]))
-    if length(samples) % (n*(n-1)//2) == 0
-        println("⚠️ Excluding one sample for divisibility reasons.")
-        r = Int(rand(UInt) % length(samples)) + 1
-        tropical_median_consensus2(samples[[1:r; r+2:end]])
-    else
-        tropical_median_consensus2(samples[1:end])
-    end
-end
-
-"""
-    repeat_until_success(f, args...; kwargs...)
-
-Runs `f(args...; kwargs...)` until no exception is raised.
-Of course, this only makes sense for non-deterministic functions.
-"""
-function repeat_until_success(f, args...; kwargs...)
-    while true
-        try
-            return f(args...; kwargs...)
-        catch e
-            println("⚠️ Failed; try again")
-            continue
-        end
-    end
-end
-
-using ProgressMeter
-ProgressMeter.ncalls(::typeof(argmin), ::Function, arg) = length(arg)
-ProgressMeter.ncalls(::typeof(findmin), ::Function, arg) = length(arg)
-
-# The following loop will take a while, which is why it is commented out.
-# The seed that minimizes the loss of the clustering 
+#%% Run k-clusterings with different seeds for the (randomized) centroid initialization.
+#   We want to find the seed which minimizes the total loss.
+#   CAUTION! The following loop will take quite a while.
+#   See the code cell below for the seed that minimizes the loss.
 k = 17
-
 losses = @showprogress map(1:100) do s
     Random.seed!(s)
     try
@@ -63,38 +23,29 @@ losses = @showprogress map(1:100) do s
         Inf
     end   
 end
-
 loss_min, seed_min = findmin(losses)
-h_losses = histogram(losses, 
-    bins = range(loss_min-1, ceil(maximum(losses))+10, step=20),
-    legend = false,
-    color = :gray,
-    linecolor = :black,
-    grid = true,
-    xticks = floor(minimum(losses)):20:ceil(maximum(losses))+5,
-    xtickfontsize = 14,
-    ytickfontsize = 14)
-savefig("losses.pdf")
+h_losses = histogram(losses, bins = range(loss_min-1, ceil(maximum(losses))+10, step=20), legend = false, color = :gray, linecolor = :black, grid = true, xticks = floor(minimum(losses)):20:ceil(maximum(losses))+5, xtickfontsize = 14, ytickfontsize = 14) # savefig("losses.pdf")
 
+#%% We ran this before. The following seed attains the minimum.
 Random.seed!(31)
-# Random.seed!(s[2])
 centroids, labels = cluster(samples, k; median_func=tropical_median_consensus_div)[end]
 loss(centroids, labels, samples)
 
-# Make centroids have all positive edge lengths and all of same height
+# To make sense of the centroids as trees, make all edge lengths positive and all trees have same height.
+# Since d_trop is invariant under denormalization, the loss stays the same:
 centroids = denormalize.(centroids)
 centroids = (centroids .+ (maximum(height.(centroids)) .- height.(centroids)))
 loss(centroids, labels, samples)
-
 Plots.plot(plot_phylo.(centroids)...)
-using Plots.PlotMeasures
-for (i,q) in enumerate(centroids)
-    p = plot_phylo(q)
-    plot!(p, size=(150, 150), bottom_margin=-6mm, top_margin=-1mm, left_margin=-5mm, right_margin=-1mm)
-    display(p)
-    # savefig(p, "$i.pdf")
-end
+# using Plots.PlotMeasures
+# for (i,q) in enumerate(centroids)
+#     p = plot_phylo(q)
+#     plot!(p, size=(150, 150), bottom_margin=-6mm, top_margin=-1mm, left_margin=-5mm, right_margin=-1mm)
+#     display(p)
+#     # savefig(p, "$i.pdf")
+# end
 
+#%% Understand better the nature of the different clusters (See paper)
 samples_per_cluster = let
     r = [Int[] for _ in centroids]
     for (i, l) in enumerate(labels)
@@ -102,6 +53,7 @@ samples_per_cluster = let
     end
     r
 end
+# The clusters have various sizes.
 length.(samples_per_cluster)
 
 len_SPC = length.(samples_per_cluster) 

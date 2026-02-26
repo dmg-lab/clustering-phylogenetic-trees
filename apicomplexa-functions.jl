@@ -1,17 +1,19 @@
 include("clustering.jl")
-# %% Apicomplexa
-leaq(a,b; kwargs...) = (a <= b) || isapprox(a, b; kwargs...)
 
 function max_attained_at_least_twice(a,b,c)
     ma = maximum((a,b,c))
     mi = minimum((a,b,c))
     mid = a + b + c - ma - mi
-    # isapprox(ma, mid, atol=1e-12, rtol=sqrt(eps(mid)))
     isapprox(ma, mid)
 end
 
 max_attained_precisely_twice(a,b,c) = max_attained_at_least_twice(a,b,c) && !(isapprox(a,b) && isapprox(a,c) && isapprox(b,c))
 
+"""
+    is_ultrametric(m)
+
+A symmetric matrix m is ultrametric if the maximum of all {m[i,j], m[i,k], m[jk]} is attained at least twice.
+"""
 function is_ultrametric(m)
     n = size(m, 1)
     if !is_symmetric(m)
@@ -19,13 +21,17 @@ function is_ultrametric(m)
     end 
     for i in 1:n, j in i+1:n, k in j+1:n
         if !max_attained_at_least_twice(m[i,j], m[i,k], m[j,k])
-            # println("Not ultrametric: d($i, $j) = $(m[i,j]), d($i, $k) = $(m[i,k]), d($j, $k) = $(m[j,k])")
             return false
         end
     end
     return true
 end
 
+"""
+    is_binary_tree(m)
+
+a symmetric matrix m encodes a binary tree if the maximum of all {m[i,j], m[i,k], m[jk]} is attained precisely twice.
+"""
 function is_binary_tree(m)
     n = size(m, 1)
     if !is_symmetric(m)
@@ -33,7 +39,6 @@ function is_binary_tree(m)
     end 
     for i in 1:n, j in i+1:n, k in j+1:n
         if !max_attained_precisely_twice(m[i,j], m[i,k], m[j,k])
-            # println("Not ultrametric: d($i, $j) = $(m[i,j]), d($i, $k) = $(m[i,k]), d($j, $k) = $(m[j,k])")
             return false
         end
     end
@@ -42,8 +47,11 @@ end
 
 is_binary_tree(t::PhylogeneticTree) = is_binary_tree(cophenetic_matrix(t))
 
-""" Make a phylogenetic tree equidistant by adding sufficient lengths to the edges
-    adjacent to the leaves. All lengths of interiour edges remain the same. """
+""" 
+    make_equidistant(tree::PhylogeneticTree{T})
+
+Make a phylogenetic tree equidistant by adding sufficient lengths to the edges
+adjacent to the leaves. All lengths of interiour edges remain the same. """
 function make_equidistant(tree::PhylogeneticTree{T}) where T
     graph = adjacency_tree(tree)
     edge_lengths = tree.pm_ptree.EDGE_LENGTHS;
@@ -85,16 +93,13 @@ is_normalized(t) = isapproxzero(mean(vech(t)))
 isapproxzero(t) = isapprox(t, zero(t); atol=1e-10)
 
 # Alternative implementations of tropical median consensus tree, using `troipical_median` directly
-include("make_tree_like_again.jl")
+include("inexact.jl")
 function tropical_median_consensus2(trees::AbstractVector{PhylogeneticTree{T}}) where T
     @assert all(is_equidistant.(trees)) "All input trees must be equidistant."
     t = only(unique(taxa.(trees)))
     mat = collect(transpose(stack(vech.(trees))))
-    # mat .-= mean(mat, dims=2)
     sol = collect(convert(T, c) for c in Polymake.tropical.tropical_median(mat))::Vector{T}
-    # sol .-= minimum(sol) # should probably do this (moving solution away from H), because Polymake might assume nonnegative entries for cophenetric matrix
     mat_sol = vech_to_matrix(sol)
-    # @assert isapprox(sum(vech(mat))) "The resulting cophenetic matrix $mat does not lie on the hyperplane"
     if !is_ultrametric(mat_sol)
         println("ℹ️ The resulting cophenetic matrix $(vech(mat_sol)) is not ultrametric; try to make it tree-like again.")
         mat_sol = make_tree_like_again(mat_sol)

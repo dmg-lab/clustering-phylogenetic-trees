@@ -43,15 +43,15 @@ end
 vech(t::PhylogeneticTree) = vech(cophenetic_matrix(t))
 
 """ Asymmetric tropical distance. """
-function d(x::Vector, y::Vector)
+function d_trop(x::Vector, y::Vector)
     sum(y .- x) - length(x)*minimum(y .- x)
 end
 
-function d(x::PhylogeneticTree, y::PhylogeneticTree)
+function d_trop(x::PhylogeneticTree, y::PhylogeneticTree)
     nx = length(taxa(x))
     ny = length(taxa(y))
     @assert nx == ny "Cannot compare trees with different numbers of leaves."
-    d(vech(x), vech(y))
+    d_trop(vech(x), vech(y))
 end
 
 function normalize(newick_string)
@@ -74,7 +74,12 @@ read_newick_json(filename, do_normalize=false) = (
     .|> Base.Fix1(phylogenetic_tree, Float64)
 )
 
-function farthest_point_sampling_rand(samples, k; d=d)
+"""
+    farthest_point_sampling_rand(samples, k; d=d_trop)
+
+Chooses k centroids according to the (randomized) k-means++ initialization scheme.
+"""
+function farthest_point_sampling_rand(samples, k; d=d_trop)
     cs = Vector{PhylogeneticTree}(undef, k)
     cs[1] = rand(samples)
     ds = d.(Ref(cs[1]), samples)
@@ -85,7 +90,13 @@ function farthest_point_sampling_rand(samples, k; d=d)
     return cs
 end
 
-function farthest_point_sampling_strict(samples, k; d=d)
+"""
+    farthest_point_sampling_strict(samples, k; d=d_trop)
+
+Chooses a random point from `samples`, and chooses the `k` points that are farthest away
+from all other previously selected points.
+"""
+function farthest_point_sampling_strict(samples, k; d=d_trop)
     cs = Vector{PhylogeneticTree}(undef, k)
     cs[1] = rand(samples)
     ds = d.(Ref(cs[1]), samples)
@@ -96,25 +107,34 @@ function farthest_point_sampling_strict(samples, k; d=d)
     return cs
 end
 
-loss(centroids, labels, samples) = sum(d(s, centroids[labels[i]]) for (i, s) in enumerate(samples))
+loss(centroids, labels, samples; d=d_trop) = sum(d(s, centroids[labels[i]]) for (i, s) in enumerate(samples))
 
-""" k-means-clustering w.r.t. the distance function `d`.
-    Either provide `centroids` as a vector of trees, a vector of indices into `samples`, or an integer.
-    In the latter case, the function samples `centrs` many centroids at random."""
-function cluster(samples, centrs::Union{Int, Vector{Int}, Vector{PhylogeneticTree}}; d=d, median_func=tropical_median_consensus)
+""" 
+    cluster(samples::Vector{T}, k::Union{Int, Vector{Int}, Vector{T}}; d=d_trop, median_func=tropical_median_consensus) where T
+
+k-means-clustering w.r.t. the distance function `d`. Initialization of the centroids is as follows: If `k` is
+* an `Int`: select initial centroids by k-means++-clustering (see `farthest_point_sampling_rand()`)
+* a `Vector{Int}`: use the samples indexed by `k` as initial centroids
+* a `Vector` of the same type as `samples`: use these centroids.
+
+Returns:
+
+A vector representing the state after each iteration of the algorithm
+The vector consists of pairs `(centroids, labels)`, where `c::Vector{T}` is the list of centroids after the respective iteration,
+and `labels::Vector{Int}` is a vector such that `samples[i]` belongs to the `lables[i]`-th cluster.
+"""
+function cluster(samples::Vector{T}, k::Union{Int, Vector{Int}, Vector{T}}; d=d_trop, median_func=tropical_median_consensus) where T
     # farthest-point sampling of initial centroids
-    centroids = centrs isa Int ? farthest_point_sampling_rand(samples, centrs; d=d) : centrs isa Vector{Int} ? samples[centrs] : centrs
+    centroids = k isa Int ? farthest_point_sampling_rand(samples, k; d=d) : k isa Vector{Int} ? samples[k] : k
     
     labels = fill(-1, length(samples))      # index i of the cluster each sample s belongs to
     clusters = [Int[] for _ in centroids]   # samples s belonging to cluster i
-    iterations = Tuple{Vector{PhylogeneticTree}, Vector{Int64}}[]
-    loss = inf                              # loss with current clustering
+    iterations = Tuple{Vector{T}, Vector{Int64}}[]
     while true
         # Re-assign samples to clusters
         old_labels = labels
         labels = [argmin(d(s, c) for c in centroids) for s in samples]
         push!(iterations, (centroids, labels))
-        # @assert loss <= (loss = sum(d(s, centroids[labels[i]]) for (i, s) in enumerate(samples))) "Loss did not decrease."
 
         # break if clustering is stationary
         old_labels == labels && break
@@ -128,7 +148,6 @@ function cluster(samples, centrs::Union{Int, Vector{Int}, Vector{PhylogeneticTre
             length(cluster) == 0 ? centroid : median_func(samples[cluster])
             for (cluster, centroid) in zip(clusters, centroids)
         ]
-        # @assert loss <= (loss = sum(d(s, centroids[labels[i]]) for (i, s) in enumerate(samples))) "Loss did not decrease."
     end
-    iterations
+    return iterations
 end

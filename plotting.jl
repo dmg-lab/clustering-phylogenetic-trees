@@ -1,4 +1,5 @@
 include("clustering.jl")
+using Plots, Plots.PlotMeasures
 const col0 = palette([:black])
 const col1 = palette([colorant"#ffffffff", palette(:tab10)...])
 
@@ -176,12 +177,12 @@ function plot_clusters!(p, samples, clusters)
     centroids, _ = clusters
     centroids = vech.(centroids)
     hm = [
-        isnothing(s) ? 0 : argmin(d(s, c) for c in centroids) 
+        isnothing(s) ? 0 : argmin(d_trop(s, c) for c in centroids) 
         for s in grid_of_trees
     ]
-    p = heatmap!(xs, ys, transpose(hm), aspect_ratio=:equal, color=col1, cmin=-.5, clim=(-.5, 9.5), alpha=.2)
+    heatmap!(p, xs, ys, transpose(hm), aspect_ratio=:equal, color=col1, cmin=-.5, clim=(-.5, 9.5), alpha=.2)
     hm = [
-        isnothing(s) ? 0 : minimum(d(s, c) for c in centroids)
+        isnothing(s) ? 0 : minimum(d_trop(s, c) for c in centroids)
         for s in grid_of_trees
     ]
     contour!(p, xs, ys, transpose(hm), aspect_ratio=:equal, levels=50, color=col0, alpha=.5)
