@@ -13,4 +13,7 @@ The files in this repository are structured as follows:
 * `clustering.jl` contains the essential function `cluster` for computing the clustering of phylogenetic trees.
 * `examples.jl` shows how clustering a synthetic dataset of hundred trees on four taxa is performed.
   This case is sufficiently low dimensional to also be visualized.
-& 
+* `inexact.jl` contains helper functions for working with data with floating point coefficients,
+  in particular for working with numerical artifacts.
+* `apicomplexa-clustering.jl` contains code for clustering the apicomplexa data set
+  reported on in our paper.
