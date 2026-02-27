@@ -205,7 +205,7 @@ function explain_visualization(from=(1,0,0))
         exp(15//8*π*im),
     ]
     O = vech(tree_from_coordinates(from...))
-    p = plot(aspect_ratio=:equal, size=(800,800), showaxis=false, legend=false, xlims=(-1.0,1.0), ylims=(-1.0,1.5))
+    p = plot(aspect_ratio=:equal, size=(800,800), showaxis=false, legend=false, xlims=(-1.0,1.0), ylims=(-1.1,1.5))
     for (i, g) in enumerate(grid)
         plot!(p, [0, real(g)], [0, imag.(g)], color=:black, label="", aspect_ratio=:equal, size=(800,800))
         # annotate!(p, 1.1*real(g), 1.1 * imag(g), "$i")
@@ -213,17 +213,20 @@ function explain_visualization(from=(1,0,0))
     g = [exp(1//4*π*im), exp(1//4*π*im) + exp(3//4*π*im), exp(3//4*π*im), exp(9//8*π*im), exp(6//4*π*im), exp(15//8*π*im), exp(1//4*π*im)]
     plot!(p, real.(g), imag.(g), color=:black)
     hm1 = [
-        isnothing(s) ? 0 : d(O, s)
+        isnothing(s) ? 0 : d_trop(O, s)
         for s in grid_of_trees
     ]
     hm2 = [
-        isnothing(s) ? 0 : d(s, O)
+        isnothing(s) ? 0 : d_trop(s, O)
         for s in grid_of_trees
     ]
     lvls = Int(ceil(max(maximum(hm1), maximum(hm2))))
     contour!(p, xs, ys, transpose(hm1), aspect_ratio=:equal, levels=lvls, clims=(0,lvls+1), color=:black)
     contour!(p, xs, ys, transpose(hm2), aspect_ratio=:equal, levels=lvls, clims=(0,lvls+1), color=:red, colorbar=false)
+    # show points where asymmetry becomes maximal
+    c = canvas_coordinates.(tree_from_coordinates.([4,4,1,1,1,1], [0, 0, .5, 1, 0, 0], [.5, 1, 0, 0, 0.5, 1]))
+    scatter!(p, real.(c), imag.(c), color=:blue, ms=10)
     return p
 end
-# explain_visualization((1,.0, .0))
-# savefig(explain_visualization(), "visualization_explanation.pdf")
+explain_visualization()
+savefig(explain_visualization(), "pictures/visualization_explanation.pdf")
