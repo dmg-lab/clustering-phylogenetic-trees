@@ -224,7 +224,8 @@ function explain_visualization(from=(1,0,0))
     contour!(p, xs, ys, transpose(hm1), aspect_ratio=:equal, levels=lvls, clims=(0,lvls+1), color=:black)
     contour!(p, xs, ys, transpose(hm2), aspect_ratio=:equal, levels=lvls, clims=(0,lvls+1), color=:red, colorbar=false)
     # show points where asymmetry becomes maximal
-    c = canvas_coordinates.(tree_from_coordinates.([4,4,1,1,1,1], [0, 0, .5, 1, 0, 0], [.5, 1, 0, 0, 0.5, 1]))
+    c = canvas_coordinates.(tree_from_coordinates.(
+        [4,1,1], [0, .5, 0], [.5, 0, 0.5]))
     scatter!(p, real.(c), imag.(c), color=:blue, ms=10)
     return p
 end
