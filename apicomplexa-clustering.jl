@@ -2,7 +2,7 @@ using Combinatorics, ProgressMeter
 include("apicomplexa-functions.jl")
 
 # Read data and make all trees equidistant by extending edges to leaves.
-samples = (open("../data/R-data/apicomplexa.txt")
+samples = (open("data/R-data/apicomplexa.txt")
      |> readlines
     .|> (s -> phylogenetic_tree(Float64, s)) # <== also with Float64 and QQFieldElem
     .|> make_equidistant
